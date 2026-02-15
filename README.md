@@ -11,7 +11,7 @@ addressing.
 ### Requirements
 
 - Python 3.10+
-- Lineage at `~/dev/lineage/`
+- Lore at `~/dev/lore/`
 
 No installation step. No `pip install`. The CLI runs directly from the repo
 using stdlib imports and `sys.path`.
@@ -25,7 +25,7 @@ export PATH="$HOME/dev/praxis/bin:$PATH"
 ### Override paths
 
 ```bash
-export LINEAGE_DIR="/path/to/lineage"
+export LORE_DIR="/path/to/lore"
 ```
 
 ## Usage
@@ -82,7 +82,7 @@ praxis timeline fix-auth
 ## Design
 
 Praxis writes failure journals as JSONL to
-`~/dev/lineage/failures/data/failures.jsonl`. This matches Lineage's existing
+`~/dev/lore/failures/data/failures.jsonl`. This matches Lore's existing
 conventions (`journal/data/decisions.jsonl`, `inbox/data/observations.jsonl`).
 
 Stdlib only. No PyYAML, no external dependencies.

@@ -84,6 +84,39 @@ def cmd_timeline(args):
               f"{f['error_type']} -- {f['error_message']}")
 
 
+def cmd_correlate(args):
+    """Show failures alongside nearby decisions."""
+    results = analysis.correlate(window_hours=args.window)
+    if args.json:
+        print(json.dumps(results, indent=2))
+        return
+    if not results:
+        print("No failures recorded.")
+        return
+    for r in results:
+        f = r["failure"]
+        ts = f["timestamp"][:16].replace("T", " ")
+        print(f"  {ts}  {f['id']}  {f['error_type']} -- {f['error_message']}")
+        for d in r["nearby_decisions"]:
+            print(f"    nearby: {d['id']} \"{d['decision']}\"")
+
+
+def cmd_stale(args):
+    """Show observations aging without action."""
+    result = analysis.stale(days=args.days)
+    if args.json:
+        print(json.dumps(result, indent=2))
+        return
+    obs = result["stale_observations"]
+    if not obs:
+        print(f"No stale observations (threshold: {args.days} days).")
+        return
+    print(f"  Stale observations (> {args.days} days):")
+    for o in obs:
+        print(f"    {o['id']}  {o['timestamp'][:10]}  \"{o['content']}\"")
+    print(f"  Total: {result['stale_count']} stale, {result['total_raw']} raw")
+
+
 def main():
     parser = argparse.ArgumentParser(
         prog="praxis",
@@ -118,6 +151,18 @@ def main():
     p.add_argument("mission", help="Mission ID")
     p.add_argument("--json", action="store_true", help="Output raw JSON")
     p.set_defaults(func=cmd_timeline)
+
+    # -- correlate --
+    p = sub.add_parser("correlate", help="Failures alongside nearby decisions")
+    p.add_argument("--window", type=int, default=24, help="Hours (default: 24)")
+    p.add_argument("--json", action="store_true", help="Output raw JSON")
+    p.set_defaults(func=cmd_correlate)
+
+    # -- stale --
+    p = sub.add_parser("stale", help="Observations aging without action")
+    p.add_argument("--days", type=int, default=7, help="Age threshold (default: 7)")
+    p.add_argument("--json", action="store_true", help="Output raw JSON")
+    p.set_defaults(func=cmd_stale)
 
     args = parser.parse_args()
 

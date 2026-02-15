@@ -1,13 +1,13 @@
 """Structured failure journals -- the Compounding Wisdom engine.
 
-Every failure gets a coroner's report in Lineage's failures directory.
+Every failure gets a coroner's report in Lore's failures directory.
 Over time, these reports reveal whether you need better tools, clearer
 plans, or different approaches.
 
 Adapted from praxis-rdx/failure.py. Key changes:
-- JSONL instead of YAML (stdlib-only, matches Lineage conventions)
+- JSONL instead of YAML (stdlib-only, matches Lore conventions)
 - Single append-only file instead of one file per failure
-- Writes to ~/dev/lineage/failures/data/failures.jsonl
+- Writes to ~/dev/lore/failures/data/failures.jsonl
 
 Error type vocabulary:
     UserDeny    -- Human said no.

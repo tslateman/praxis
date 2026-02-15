@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
-"""praxis -- single entry point to the agent ecosystem.
+"""praxis -- structured failure journals and analysis.
 
-Flat subcommands that delegate to Lineage, Neo, and Lore.
+The Compounding Wisdom engine. Logs failures, detects patterns,
+and surfaces systemic issues worth addressing.
 """
 
-import sys
 import json
+import sys
 import argparse
 from pathlib import Path
 
@@ -13,179 +14,110 @@ from pathlib import Path
 _here = Path(__file__).resolve().parent
 sys.path.insert(0, str(_here.parent / "src"))
 
-from praxis import store, engine, search, registry
+from praxis import failure, analysis
 
 
-def cmd_search(args):
-    """Cross-system search across Lineage and Lore."""
-    results = search.search(args.query)
-    if results:
-        for r in results:
-            source = r["source"]
-            score = r["relevance"]
-            summary = r["summary"]
-            print(f"  [{source}] ({score:.1f}) {summary}")
-        if args.json:
-            print(json.dumps(results, indent=2, default=str))
-    else:
-        print(f"No results for: {args.query}", file=sys.stderr)
-        sys.exit(1)
+def cmd_log(args):
+    """Write a failure journal entry."""
+    report = failure.log_failure(
+        mission_id=args.mission,
+        step_id=args.step,
+        tool=args.tool,
+        error_type=args.error_type,
+        error_message=args.message,
+    )
+    print(f"Logged: {report['id']} ({report['error_type']})")
 
 
-def cmd_observe(args):
-    """Capture a raw observation to Lineage inbox."""
-    text = " ".join(args.text)
-    output = store.observe(text, source=args.source, tags=args.tags)
-    print(output)
+def cmd_failures(args):
+    """Query failure journals."""
+    result = analysis.summarize(error_type=args.type, mission=args.mission)
+
+    if args.json:
+        print(json.dumps(result, indent=2))
+        return
+
+    print(f"Total: {result['total']}")
+    if result["by_type"]:
+        for et, count in result["by_type"].items():
+            print(f"  {et}: {count}")
+    if result["failures"]:
+        print()
+        for f in result["failures"]:
+            print(f"  [{f['timestamp'][:10]}] {f['id']} "
+                  f"{f['error_type']} -- {f['error_message']}")
 
 
-def cmd_remember(args):
-    """Record a decision in Lineage journal."""
-    text = " ".join(args.text)
-    output = store.remember(text, rationale=args.rationale, tags=args.tags)
-    print(output)
+def cmd_triggers(args):
+    """Show error types that hit the Rule of Three."""
+    results = analysis.triggers(threshold=args.threshold)
+
+    if args.json:
+        print(json.dumps(results, indent=2))
+        return
+
+    if not results:
+        print("No error types have hit the threshold.")
+        return
+
+    for t in results:
+        missions = ", ".join(t["missions"]) if t["missions"] else "none"
+        print(f"  {t['error_type']}: {t['count']} failures "
+              f"(missions: {missions})")
 
 
-def cmd_learn(args):
-    """Capture a pattern in Lineage."""
-    text = " ".join(args.text)
-    output = store.learn(text, context=args.context, solution=args.solution)
-    print(output)
+def cmd_timeline(args):
+    """Show failure history for a mission."""
+    entries = analysis.timeline(args.mission)
 
+    if args.json:
+        print(json.dumps(entries, indent=2))
+        return
 
-def cmd_resume(args):
-    """Resume session from Lineage."""
-    output = store.resume(session_id=args.session or "")
-    print(output)
+    if not entries:
+        print(f"No failures recorded for mission: {args.mission}")
+        return
 
-
-def cmd_sync(args):
-    """Sync ~/.mirror notes into Lineage inbox via Neo."""
-    output = engine.sync(mirror_dir=args.mirror or "")
-    print(output)
-
-
-def cmd_promote(args):
-    """Promote an inbox observation via Neo."""
-    kwargs = {}
-    if args.rationale:
-        kwargs["rationale"] = args.rationale
-    if args.context:
-        kwargs["context"] = args.context
-    if args.solution:
-        kwargs["solution"] = args.solution
-    output = engine.promote(args.id, args.type, **kwargs)
-    print(output)
-
-
-def cmd_start(args):
-    """Hydrate mission context via Neo."""
-    ctx = engine.start(args.mission_id)
-    print(json.dumps(ctx, indent=2, default=str))
-
-
-def cmd_context(args):
-    """Combined Lineage + Lore context for a project."""
-    ctx = engine.context(args.project)
-    print(json.dumps(ctx, indent=2, default=str))
-
-
-def cmd_status(args):
-    """Session and mission status."""
-    status = engine.status()
-    print(f"Inbox: {status['inbox']['raw']} raw / {status['inbox']['total']} total")
-    print(f"Journal: {status['journal']['entries']} entries")
-    print(f"Patterns: {status['patterns']['count']} patterns")
-
-
-def cmd_registry(args):
-    """Show Lore registry info for a project."""
-    info = registry.show(args.project)
-    print(json.dumps(info, indent=2, default=str))
-
-
-def cmd_projects(args):
-    """List all projects known to Lore."""
-    projects = registry.list_projects()
-    for p in projects:
-        print(f"  {p}")
+    for f in entries:
+        ts = f["timestamp"][:19].replace("T", " ")
+        print(f"  {ts}  step {f['step']}  {f['tool']}  "
+              f"{f['error_type']} -- {f['error_message']}")
 
 
 def main():
     parser = argparse.ArgumentParser(
         prog="praxis",
-        description="Ecosystem facade for Lineage, Neo, and Lore",
+        description="Structured failure journals and analysis",
     )
     sub = parser.add_subparsers(dest="command", required=True)
 
-    # -- search --
-    p = sub.add_parser("search", help="Cross-system search")
-    p.add_argument("query", help="Search term")
+    # -- log --
+    p = sub.add_parser("log", help="Write a failure journal entry")
+    p.add_argument("mission", help="Mission ID")
+    p.add_argument("step", type=int, help="Step number")
+    p.add_argument("tool", help="Tool that failed (shell, edit, etc)")
+    p.add_argument("error_type", help="Error category (UserDeny, NonZeroExit, etc)")
+    p.add_argument("message", help="What happened")
+    p.set_defaults(func=cmd_log)
+
+    # -- failures --
+    p = sub.add_parser("failures", help="Query failure journals")
+    p.add_argument("--type", help="Filter by error type")
+    p.add_argument("--mission", help="Filter by mission ID")
     p.add_argument("--json", action="store_true", help="Output raw JSON")
-    p.set_defaults(func=cmd_search)
+    p.set_defaults(func=cmd_failures)
 
-    # -- observe --
-    p = sub.add_parser("observe", help="Raw observation to Lineage inbox")
-    p.add_argument("text", nargs="+", help="Observation text")
-    p.add_argument("--source", default="praxis", help="Source label")
-    p.add_argument("--tags", default="", help="Comma-separated tags")
-    p.set_defaults(func=cmd_observe)
+    # -- triggers --
+    p = sub.add_parser("triggers", help="Error types hitting Rule of Three")
+    p.add_argument("--threshold", type=int, default=3, help="Trigger count (default: 3)")
+    p.add_argument("--json", action="store_true", help="Output raw JSON")
+    p.set_defaults(func=cmd_triggers)
 
-    # -- remember --
-    p = sub.add_parser("remember", help="Decision to Lineage journal")
-    p.add_argument("text", nargs="+", help="Decision text")
-    p.add_argument("-r", "--rationale", required=True, help="Why this matters")
-    p.add_argument("--tags", default="", help="Comma-separated tags")
-    p.set_defaults(func=cmd_remember)
-
-    # -- learn --
-    p = sub.add_parser("learn", help="Pattern to Lineage patterns")
-    p.add_argument("text", nargs="+", help="Pattern name or description")
-    p.add_argument("--context", default="", help="When this applies")
-    p.add_argument("--solution", default="", help="The pattern itself")
-    p.set_defaults(func=cmd_learn)
-
-    # -- resume --
-    p = sub.add_parser("resume", help="Resume session from Lineage")
-    p.add_argument("session", nargs="?", help="Session ID (optional)")
-    p.set_defaults(func=cmd_resume)
-
-    # -- sync --
-    p = sub.add_parser("sync", help="Mirror to Lineage inbox (via Neo)")
-    p.add_argument("--mirror", help="Override mirror directory")
-    p.set_defaults(func=cmd_sync)
-
-    # -- promote --
-    p = sub.add_parser("promote", help="Inbox to formal knowledge (via Neo)")
-    p.add_argument("id", help="Observation ID")
-    p.add_argument("type", choices=["decision", "pattern"], help="Target type")
-    p.add_argument("--rationale", help="Why (for decisions)")
-    p.add_argument("--context", help="When it applies (for patterns)")
-    p.add_argument("--solution", help="The pattern (for patterns)")
-    p.set_defaults(func=cmd_promote)
-
-    # -- start --
-    p = sub.add_parser("start", help="Hydrate mission context (via Neo)")
-    p.add_argument("mission_id", help="Mission ID")
-    p.set_defaults(func=cmd_start)
-
-    # -- context --
-    p = sub.add_parser("context", help="Combined Lineage + Lore context")
-    p.add_argument("project", help="Project name")
-    p.set_defaults(func=cmd_context)
-
-    # -- status --
-    p = sub.add_parser("status", help="Session and mission status")
-    p.set_defaults(func=cmd_status)
-
-    # -- registry --
-    p = sub.add_parser("registry", help="Show Lore registry info")
-    p.add_argument("project", help="Project name")
-    p.set_defaults(func=cmd_registry)
-
-    # -- projects --
-    p = sub.add_parser("projects", help="List all projects from Lore")
-    p.set_defaults(func=cmd_projects)
+    # -- timeline --
+    p = sub.add_parser("timeline", help="Failure history for a mission")
+    p.add_argument("mission", help="Mission ID")
+    p.add_argument("--json", action="store_true", help="Output raw JSON")
+    p.set_defaults(func=cmd_timeline)
 
     args = parser.parse_args()
 

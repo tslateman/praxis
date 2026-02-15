@@ -1,1 +1,1 @@
-"""Praxis -- ecosystem facade for Lineage, Neo, and Lore."""
+"""Praxis -- structured failure journals and analysis."""

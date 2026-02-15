@@ -1,18 +1,17 @@
 # Praxis
 
-Ecosystem facade for Lineage, Neo, and Lore. A single Python entry point that
-reads the same files the shell tools read, adds validation, and provides
-cross-system search.
+Structured failure journals and analysis for the agent ecosystem. Every failure
+gets a coroner's report. Over time, these reports reveal systemic issues worth
+addressing.
+
+"Don't build the riverboat. Build the map of the river."
 
 ## Setup
 
 ### Requirements
 
 - Python 3.10+
-- [yq](https://github.com/mikefarah/yq/) (`brew install yq`)
 - Lineage at `~/dev/lineage/`
-- Neo at `~/dev/neo/`
-- Lore at `~/dev/lore/`
 
 No installation step. No `pip install`. The CLI runs directly from the repo
 using stdlib imports and `sys.path`.
@@ -20,111 +19,92 @@ using stdlib imports and `sys.path`.
 ### Optional: add to PATH
 
 ```bash
-# Add to ~/.zshrc or ~/.bashrc
 export PATH="$HOME/dev/praxis/bin:$PATH"
 ```
 
-Then use `praxis` instead of `bin/praxis` everywhere below.
-
 ### Override paths
-
-If your ecosystem lives somewhere other than `~/dev/`:
 
 ```bash
 export LINEAGE_DIR="/path/to/lineage"
-export NEO_DIR="/path/to/neo"
-export LORE_DIR="/path/to/lore"
-export MIRROR_DIR="/path/to/mirror"    # defaults to ~/.mirror
 ```
 
 ## Usage
 
-### Search across all systems
+### Log a failure
 
 ```bash
-praxis search "JSONL"
-#   [journal] (0.9) Use JSONL for decision storage
-
-praxis search "Praxis"
-#   [pattern] (0.9) Prototype Decomposition
+praxis log fix-auth 2 shell NonZeroExit "Command failed with exit code 1"
 ```
 
-### Capture observations, decisions, and patterns
+### Query failures
 
 ```bash
-# Raw observation to Lineage inbox
-praxis observe "Vector search fails on large datasets"
+# All failures
+praxis failures
 
-# Decision with rationale to Lineage journal
-praxis remember "Use HNSW index" -r "Better recall at scale"
+# Filter by error type
+praxis failures --type NonZeroExit
 
-# Pattern to Lineage patterns
-praxis learn "Cache invalidation" --context "Distributed systems" --solution "TTL + event-driven purge"
+# Filter by mission
+praxis failures --mission fix-auth
+
+# Raw JSON output
+praxis failures --json
 ```
 
-### Mirror sync and promotion
+### Detect systemic patterns
 
 ```bash
-# Sync ~/.mirror/*.md into Lineage inbox (via Neo)
-praxis sync
+# Error types that recur >= 3 times
+praxis triggers
 
-# Promote an inbox observation to a decision or pattern
-praxis promote obs-abc123 decision --rationale "Needs investigation"
-praxis promote obs-abc123 pattern --context "When deploying to prod"
+# Custom threshold
+praxis triggers --threshold 5
 ```
 
-### Project context
+### Mission timeline
 
 ```bash
-# Combined Lineage + Lore context for a project
-praxis context council
-
-# Lore registry info only
-praxis registry council
-
-# List all projects known to Lore
-praxis projects
+praxis timeline fix-auth
 ```
 
-### Session and mission management
+## Error Type Vocabulary
 
-```bash
-# Resume from a previous Lineage session
-praxis resume
-
-# Hydrate mission context from Neo
-praxis start <mission-id>
-
-# Session status -- inbox, journal, and pattern counts
-praxis status
-```
+| Type          | Meaning                                      |
+| ------------- | -------------------------------------------- |
+| `UserDeny`    | Human said no                                |
+| `HardDeny`    | Denylist blocked it                          |
+| `NonZeroExit` | Command ran but failed                       |
+| `Timeout`     | Command hung                                 |
+| `ToolError`   | Tool crashed or returned garbage             |
+| `LogicError`  | Output was wrong (caught by eval, not crash) |
 
 ## Design
 
-Praxis is a **reductive facade** -- it wraps existing tools without replacing
-them.
+Praxis writes failure journals as JSONL to
+`~/dev/lineage/failures/data/failures.jsonl`. This matches Lineage's existing
+conventions (`journal/data/decisions.jsonl`, `inbox/data/observations.jsonl`).
 
-- **Reads** happen in Python, with schema validation
-- **Writes** delegate to `lineage.sh` and Neo shell scripts
-- **YAML** parsed via `yq -o=json` (stdlib-only, no PyYAML)
+Stdlib only. No PyYAML, no external dependencies.
 
-Delete `~/dev/praxis/` and everything still works. The shell CLIs remain
-authoritative.
+## Library Usage
 
-## Layout
+```python
+from praxis.failure import log_failure
+from praxis.analysis import summarize, triggers, timeline
 
-```text
-bin/praxis              Single CLI entry point
-src/praxis/
-  config.py             Path resolution (env vars)
-  store.py              Lineage file I/O + shell delegation
-  schema.py             Data validation
-  engine.py             Orchestration (sync, promote, start)
-  registry.py           Lore registry reader
-  search.py             Cross-system search
+log_failure("fix-auth", 2, "shell", "NonZeroExit", "Command failed")
+result = summarize(error_type="NonZeroExit")
+hot = triggers(threshold=3)
+history = timeline("fix-auth")
 ```
 
 ## Provenance
 
-- `000-bootstrap-praxis.json` -- original bootstrap mission
-- `000-json-over-yaml-for-bootstrap.json` -- JSON-over-YAML decision record
+Adapted from `~/dev/praxis-rdx/failure.py`. That prototype included an executor,
+proxy, and planner -- all dropped because Claude Code serves those roles. The
+failure journals and analysis layer are the genuinely novel contribution.
+
+The architectural patterns session that produced `praxis-rdx` concluded: the
+proxy and executor reinvent Claude Code. The failure journals and learning layer
+are what's new. This project keeps the map and drops the riverboat.

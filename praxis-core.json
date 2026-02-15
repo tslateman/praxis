@@ -1,0 +1,30 @@
+{
+  "id": "praxis-core",
+  "type": "facade",
+  "description": "Ecosystem facade wrapping Lineage, Neo, and Lore",
+  "location": {
+    "root": "~/dev/praxis/",
+    "entry_point": "bin/praxis",
+    "lib": "src/praxis/"
+  },
+  "capabilities": [
+    "cross-system-search",
+    "schema-validation",
+    "lineage-read-write",
+    "neo-orchestration",
+    "lore-registry-read"
+  ],
+  "relations": [
+    {"type": "relies_on", "target": "python-3.10+"},
+    {"type": "relies_on", "target": "yq"},
+    {"type": "wraps", "target": "lineage"},
+    {"type": "wraps", "target": "neo"},
+    {"type": "wraps", "target": "lore"}
+  ],
+  "context_hints": [
+    "Praxis is deletable -- shell CLIs remain authoritative",
+    "Writes delegate to lineage.sh and Neo scripts",
+    "YAML read via yq -o=json (no PyYAML)",
+    "Reads the same files as the shell tools"
+  ]
+}

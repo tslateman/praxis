@@ -1,0 +1,7 @@
+{
+  "id": "000-json-over-yaml-for-bootstrap",
+  "context": "Bootstrapping Praxis with zero external dependencies (Python stdlib only)",
+  "problem": "YAML is human-friendly for config but requires PyYAML, breaking the zero-dependency constraint",
+  "solution": "Use JSON for all storage. JSON is stdlib (import json). Human readability is adequate with indent=2. YAML can be layered on later as optional sugar without changing the data model.",
+  "created": "2026-02-14T00:00:00Z"
+}

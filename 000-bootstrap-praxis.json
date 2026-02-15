@@ -1,0 +1,17 @@
+{
+  "id": "000-bootstrap-praxis",
+  "goal": "Initialize the Praxis dynastic development environment with persistent filesystem-based memory",
+  "success_criteria": [
+    "Compounding Wisdom: patterns/ directory grows with learned lessons",
+    "Zero-Loss Handoff: any agent can crash and a new one resumes instantly via lineage state",
+    "Separation of Concerns: intent defined once in Lineage, not hallucinated anew by every agent"
+  ],
+  "constraints": [
+    "Python standard library only — no external dependencies",
+    "Unix philosophy — text streams, JSON in, JSON out",
+    "Idempotent — running setup twice must not break anything",
+    "Patterns learned are never lost"
+  ],
+  "status": "active",
+  "created": "2026-02-14T00:00:00Z"
+}

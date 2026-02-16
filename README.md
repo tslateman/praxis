@@ -1,10 +1,24 @@
 # Praxis
 
-Structured failure journals and analysis for the agent ecosystem. Every failure
-gets a coroner's report. Over time, these reports reveal systemic issues worth
-addressing.
+Pragmatic leverage for getting shit done. The operational synthesis layer over Lore.
 
-"Don't build the riverboat. Build the map of the river."
+## The Triangle
+
+```
+Lore (intent)                spec-trace (verification)
+    │                              │
+    │   success_criteria           │   done_when
+    │   goals → missions           │   tasks → reviews
+    │                              │
+    └──────────────┬───────────────┘
+                   │
+              Praxis (synthesis)
+                   │
+            status, next, blockers,
+            health, triggers
+```
+
+Praxis reads from Lore's memory (intent, failures, inbox, journal, patterns) and synthesizes actionable views. It owns no storage — Lore owns all writes.
 
 ## Setup
 
@@ -13,98 +27,53 @@ addressing.
 - Python 3.10+
 - Lore at `~/dev/lore/`
 
-No installation step. No `pip install`. The CLI runs directly from the repo
-using stdlib imports and `sys.path`.
+No installation step. No `pip install`. The CLI runs directly from the repo.
 
-### Optional: add to PATH
+### Add to PATH
 
 ```bash
 export PATH="$HOME/dev/praxis/bin:$PATH"
 ```
 
-### Override paths
+## Commands
 
-```bash
-export LORE_DIR="/path/to/lore"
-```
+### Operational
 
-## Usage
+| Command                 | Description                              |
+| ----------------------- | ---------------------------------------- |
+| `praxis status`         | Where am I? Active goals, blockers       |
+| `praxis next`           | What should I work on now?               |
+| `praxis blockers`       | Failures, stale observations, friction   |
+| `praxis health`         | Ecosystem pulse — single-page summary    |
 
-### Log a failure
+### Analysis
 
-```bash
-praxis log fix-auth 2 shell NonZeroExit "Command failed with exit code 1"
-```
+| Command                 | Description                              |
+| ----------------------- | ---------------------------------------- |
+| `praxis triggers`       | Error types hitting Rule of Three        |
+| `praxis friction`       | Failures mapped to project boundaries    |
+| `praxis blind-spots`    | Recurring failures without decisions     |
+| `praxis stale`          | Observations aging without action        |
+| `praxis correlate`      | Failures alongside nearby decisions      |
 
-### Query failures
+### Delegation (writes go to Lore)
 
-```bash
-# All failures
-praxis failures
-
-# Filter by error type
-praxis failures --type NonZeroExit
-
-# Filter by mission
-praxis failures --mission fix-auth
-
-# Raw JSON output
-praxis failures --json
-```
-
-### Detect systemic patterns
-
-```bash
-# Error types that recur >= 3 times
-praxis triggers
-
-# Custom threshold
-praxis triggers --threshold 5
-```
-
-### Mission timeline
-
-```bash
-praxis timeline fix-auth
-```
-
-## Error Type Vocabulary
-
-| Type          | Meaning                                      |
-| ------------- | -------------------------------------------- |
-| `UserDeny`    | Human said no                                |
-| `HardDeny`    | Denylist blocked it                          |
-| `NonZeroExit` | Command ran but failed                       |
-| `Timeout`     | Command hung                                 |
-| `ToolError`   | Tool crashed or returned garbage             |
-| `LogicError`  | Output was wrong (caught by eval, not crash) |
+| Praxis Shortcut         | Delegates To                             |
+| ----------------------- | ---------------------------------------- |
+| `praxis fail <args>`    | `lore fail <args>`                       |
+| `praxis observe <text>` | `lore observe <text>`                    |
+| `praxis decide <text>`  | `lore remember <text>`                   |
 
 ## Design
 
-Praxis writes failure journals as JSONL to
-`~/dev/lore/failures/data/failures.jsonl`. This matches Lore's existing
-conventions (`journal/data/decisions.jsonl`, `inbox/data/observations.jsonl`).
+Praxis is a pure facade. It:
 
-Stdlib only. No PyYAML, no external dependencies.
+1. **Reads** from Lore's JSONL files (failures, inbox, journal, intent)
+2. **Synthesizes** actionable views (status, next, blockers)
+3. **Delegates** writes to Lore CLI
 
-## Library Usage
-
-```python
-from praxis.failure import log_failure
-from praxis.analysis import summarize, triggers, timeline
-
-log_failure("fix-auth", 2, "shell", "NonZeroExit", "Command failed")
-result = summarize(error_type="NonZeroExit")
-hot = triggers(threshold=3)
-history = timeline("fix-auth")
-```
+No direct file writes. No duplicate storage. Lore is the single source of truth.
 
 ## Provenance
 
-Adapted from `~/dev/praxis-rdx/failure.py`. That prototype included an executor,
-proxy, and planner -- all dropped because Claude Code serves those roles. The
-failure journals and analysis layer are the genuinely novel contribution.
-
-The architectural patterns session that produced `praxis-rdx` concluded: the
-proxy and executor reinvent Claude Code. The failure journals and learning layer
-are what's new. This project keeps the map and drops the riverboat.
+Adapted from `~/dev/praxis-rdx/failure.py`. The executor, proxy, and planner were dropped — Claude Code serves those roles. The failure analysis layer remains, reframed as one input to pragmatic action rather than the whole story.

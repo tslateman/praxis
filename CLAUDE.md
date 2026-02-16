@@ -1,45 +1,36 @@
-# Praxis -- Failure Journals
+# Praxis — Pragmatic Leverage
 
-Structured failure journals and analysis. The "Compounding Wisdom" engine.
+Operational synthesis layer over Lore. Reads from Lore's memory, synthesizes actionable views.
 
 ## Commands
 
-| Command                                                 | Action                              |
-| ------------------------------------------------------- | ----------------------------------- |
-| `praxis log <mission> <step> <tool> <error_type> <msg>` | Write failure journal entry         |
-| `praxis failures [--type TYPE] [--mission ID]`          | Query failures                      |
-| `praxis triggers [--threshold N]`                       | Error types hitting Rule of Three   |
-| `praxis timeline <mission>`                             | Mission failure history             |
-| `praxis correlate [--window N]`                         | Failures alongside nearby decisions |
-| `praxis stale [--days N]`                               | Observations aging without action   |
-
-## Error Type Vocabulary
-
-`UserDeny`, `HardDeny`, `NonZeroExit`, `Timeout`, `ToolError`, `LogicError`
+| Command              | Action                                          |
+| -------------------- | ----------------------------------------------- |
+| `praxis status`      | Active goals, current blockers, ecosystem pulse |
+| `praxis next`        | Prioritized work queue                          |
+| `praxis blockers`    | Failures, stale items, friction points          |
+| `praxis health`      | Single-page ecosystem summary                   |
+| `praxis triggers`    | Error types hitting Rule of Three               |
+| `praxis friction`    | Failures at project boundaries                  |
+| `praxis blind-spots` | Recurring failures without decisions            |
+| `praxis stale`       | Observations aging without action               |
 
 ## Architecture
 
-- **Storage**: JSONL at `~/dev/lore/failures/data/failures.jsonl`
-- **Data sources**: Reads from Lore (journal, inbox, failures), Neo (logs), Mirror (captures)
-- **Dependencies**: Python 3.10+ (stdlib only)
-- **Write convention**: Praxis owns write logic; Lore owns storage
+- **Storage**: None. Lore owns all data.
+- **Reads from**: Lore (intent, failures, inbox, journal, patterns)
+- **Writes via**: Delegation to `lore` CLI
+- **Dependencies**: Python 3.10+ (stdlib only), Lore
 
 ## Layout
 
 ```text
 bin/praxis              CLI entry point
 src/praxis/
-  config.py             Path resolution (LORE_DIR)
-  failure.py            Write failure journals (JSONL)
-  analysis.py           Query, triggers, timeline
+  lore.py               Read from Lore's data files
+  synthesis.py          Combine sources into actionable views
 ```
 
 ## Pending Plans
 
 Check `plans/` for session pickup files before starting new work.
-
-## Provenance
-
-Adapted from `~/dev/praxis-rdx/failure.py`. The executor, proxy, and planner
-were dropped -- Claude Code is the runtime. The failure journals and analysis
-layer are the genuinely novel contribution.

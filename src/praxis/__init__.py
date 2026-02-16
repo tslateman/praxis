@@ -1,1 +1,5 @@
-"""Praxis -- structured failure journals and analysis."""
+"""Praxis -- pragmatic leverage for getting shit done.
+
+Operational synthesis layer over Lore. Reads from Lore's memory,
+synthesizes actionable views.
+"""

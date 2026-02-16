@@ -168,12 +168,16 @@ def cmd_health(args):
         for o in result["overlap"]:
             projs = ", ".join(o["projects"])
             print(f"  `{o['command']}` — {projs}")
+        print()
+        print("  Fix: Rename or consolidate commands in owning project")
     
     if result["complexity"]:
         print()
         print("Complexity:")
         for c in result["complexity"]:
             print(f"  {c['project']}: {c['command_count']} commands (threshold: {c['threshold']})")
+        print()
+        print("  Fix: Group related commands under subcommands, remove rarely-used options")
     
     undoc = result["undocumented"]
     if undoc["decisions"] or undoc["patterns"]:
@@ -184,6 +188,11 @@ def cmd_health(args):
         for p in undoc["patterns"][:5]:
             missing = ", ".join(p["missing"])
             print(f"  {p['id']}: \"{p['name']}\" (missing: {missing})")
+        print()
+        if undoc["decisions"]:
+            print("  Fix: lore remember \"<decision>\" --rationale \"why\"")
+        if undoc["patterns"]:
+            print("  Fix: lore learn \"<pattern>\" --problem \"what it solves\"")
 
 
 def cmd_triggers(args):

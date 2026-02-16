@@ -40,30 +40,30 @@ export PATH="$HOME/dev/praxis/bin:$PATH"
 
 ### Operational
 
-| Command                 | Description                              |
-| ----------------------- | ---------------------------------------- |
-| `praxis status`         | Where am I? Active goals, blockers       |
-| `praxis next`           | What should I work on now?               |
-| `praxis blockers`       | Failures, stale observations, friction   |
-| `praxis health`         | Ecosystem pulse — single-page summary    |
+| Command           | Description                            |
+| ----------------- | -------------------------------------- |
+| `praxis status`   | Where am I? Active goals, blockers     |
+| `praxis next`     | What should I work on now?             |
+| `praxis blockers` | Failures, stale observations, friction |
+| `praxis health`   | Ecosystem pulse — single-page summary  |
 
 ### Analysis
 
-| Command                 | Description                              |
-| ----------------------- | ---------------------------------------- |
-| `praxis triggers`       | Error types hitting Rule of Three        |
-| `praxis friction`       | Failures mapped to project boundaries    |
-| `praxis blind-spots`    | Recurring failures without decisions     |
-| `praxis stale`          | Observations aging without action        |
-| `praxis correlate`      | Failures alongside nearby decisions      |
+| Command              | Description                           |
+| -------------------- | ------------------------------------- |
+| `praxis triggers`    | Error types hitting Rule of Three     |
+| `praxis friction`    | Failures mapped to project boundaries |
+| `praxis blind-spots` | Recurring failures without decisions  |
+| `praxis stale`       | Observations aging without action     |
+| `praxis correlate`   | Failures alongside nearby decisions   |
 
 ### Delegation (writes go to Lore)
 
-| Praxis Shortcut         | Delegates To                             |
-| ----------------------- | ---------------------------------------- |
-| `praxis fail <args>`    | `lore fail <args>`                       |
-| `praxis observe <text>` | `lore observe <text>`                    |
-| `praxis decide <text>`  | `lore remember <text>`                   |
+| Praxis Shortcut         | Delegates To           |
+| ----------------------- | ---------------------- |
+| `praxis fail <args>`    | `lore fail <args>`     |
+| `praxis observe <text>` | `lore observe <text>`  |
+| `praxis decide <text>`  | `lore remember <text>` |
 
 ## Design
 
@@ -74,6 +74,16 @@ Praxis is a pure facade. It:
 3. **Delegates** writes to Lore CLI
 
 No direct file writes. No duplicate storage. Lore is the single source of truth.
+
+## Development History
+
+Implementation plans in `plans/`:
+
+| Plan                                  | Status   | Added                            |
+| ------------------------------------- | -------- | -------------------------------- |
+| `plan-sources-correlate.md`           | Complete | Data layer, `correlate`, `stale` |
+| `plan-phase-2-friction-blindspots.md` | Complete | `friction`, `blind-spots`        |
+| `plan-phase-3-health.md`              | Complete | `health` dashboard               |
 
 ## Provenance
 

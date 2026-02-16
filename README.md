@@ -25,6 +25,7 @@ Praxis reads from Lore's memory (intent, failures, inbox, journal, patterns) and
 ### Requirements
 
 - Python 3.10+
+- PyYAML (`pip install pyyaml`)
 - Lore at `~/dev/lore/`
 
 No installation step. No `pip install`. The CLI runs directly from the repo.

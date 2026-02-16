@@ -20,7 +20,7 @@ Operational synthesis layer over Lore. Reads from Lore's memory, synthesizes act
 - **Storage**: None. Lore owns all data.
 - **Reads from**: Lore (intent, failures, inbox, journal, patterns)
 - **Writes via**: Delegation to `lore` CLI
-- **Dependencies**: Python 3.10+ (stdlib only), Lore
+- **Dependencies**: Python 3.10+, PyYAML, Lore
 
 ## Layout
 

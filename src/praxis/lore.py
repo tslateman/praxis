@@ -16,11 +16,7 @@ import json
 import os
 from pathlib import Path
 
-try:
-    import yaml
-    HAS_YAML = True
-except ImportError:
-    HAS_YAML = False
+import yaml
 
 LORE_DIR = Path(os.environ.get("LORE_DIR", Path.home() / "dev/lore"))
 
@@ -39,17 +35,16 @@ def _read_jsonl(path: Path) -> list[dict]:
 
 
 def _read_yaml(path: Path) -> dict | None:
-    """Read a YAML file. Missing file or no PyYAML returns None."""
-    if not HAS_YAML or not path.exists():
+    """Read a YAML file. Missing file returns None."""
+    if not path.exists():
         return None
-    import yaml  # type: ignore[import-not-found]
     with open(path) as f:
         return yaml.safe_load(f)
 
 
 def _read_yaml_dir(directory: Path) -> list[dict]:
     """Read all YAML files in a directory."""
-    if not HAS_YAML or not directory.exists():
+    if not directory.exists():
         return []
     results = []
     for path in directory.glob("*.yaml"):

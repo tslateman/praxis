@@ -117,6 +117,91 @@ def cmd_stale(args):
     print(f"  Total: {result['stale_count']} stale, {result['total_raw']} raw")
 
 
+def cmd_friction(args):
+    """Show failures mapped to project boundaries."""
+    results = analysis.friction()
+    if args.json:
+        print(json.dumps(results, indent=2))
+        return
+    if not results:
+        print("No failures mapped to project boundaries.")
+        return
+    for r in results:
+        error_strs = [f"{et}: {count}" for et, count in r["error_types"].items()]
+        print(f"  {r['boundary']} boundary: {r['failure_count']} failures "
+              f"({', '.join(error_strs)})")
+        for m in r["missions"]:
+            print(f"    mission: {m}")
+
+
+def cmd_blind_spots(args):
+    """Show recurring failures without journal entries."""
+    result = analysis.blind_spots(threshold=args.threshold)
+    if args.json:
+        print(json.dumps(result, indent=2))
+        return
+    orphaned = result["orphaned_failures"]
+    if not orphaned:
+        print("No blind spots detected.")
+        return
+    print("  Blind spots (failures without nearby decisions):")
+    for o in orphaned:
+        first = o["first_occurrence"][:10]
+        latest = o["latest_occurrence"][:10]
+        print(f"    {o['error_type']} / {o['mission']}: {o['count']} failures")
+        print(f"      First: {first}, Latest: {latest}")
+    print(f"  Total: {result['blind_spot_count']} blind spots")
+
+
+def cmd_health(args):
+    """Show ecosystem health summary."""
+    result = analysis.health()
+    if args.json:
+        print(json.dumps(result, indent=2))
+        return
+
+    status = result["status"].upper()
+    summary = result["summary"]
+
+    print(f"Ecosystem Health: {status}")
+    print()
+    print("Summary:")
+    print(f"  Failures: {summary['total_failures']} total, "
+          f"{summary['recent_failures']} recent (7 days)")
+    print(f"  Triggers: {summary['trigger_count']} error types hitting threshold")
+    print(f"  Stale: {summary['stale_count']} observations aging without action")
+    print(f"  Blind spots: {summary['blind_spot_count']}")
+    print(f"  Friction: {summary['friction_boundaries']} project boundaries")
+
+    if result["triggers"]:
+        print()
+        print("Triggers:")
+        for t in result["triggers"]:
+            missions = ", ".join(t["missions"]) if t["missions"] else "none"
+            print(f"  {t['error_type']}: {t['count']} failures (missions: {missions})")
+
+    if result["stale_observations"]:
+        print()
+        print("Stale Observations:")
+        for o in result["stale_observations"]:
+            print(f"  {o['id']}  {o['timestamp'][:10]}  \"{o['content']}\"")
+
+    if result["blind_spots"]:
+        print()
+        print("Blind Spots:")
+        for b in result["blind_spots"]:
+            print(f"  {b['error_type']} / {b['mission']}: {b['count']} failures")
+
+    if result["friction"]:
+        print()
+        print("Friction:")
+        for f in result["friction"]:
+            print(f"  {f['boundary']}: {f['failure_count']} failures")
+
+    print()
+    print("Run `praxis <command> --json` for details.")
+
+
 def main():
     parser = argparse.ArgumentParser(
         prog="praxis",
@@ -163,6 +248,22 @@ def main():
     p.add_argument("--days", type=int, default=7, help="Age threshold (default: 7)")
     p.add_argument("--json", action="store_true", help="Output raw JSON")
     p.set_defaults(func=cmd_stale)
+
+    # -- friction --
+    p = sub.add_parser("friction", help="Failures mapped to project boundaries")
+    p.add_argument("--json", action="store_true", help="Output raw JSON")
+    p.set_defaults(func=cmd_friction)
+
+    # -- blind-spots --
+    p = sub.add_parser("blind-spots", help="Recurring failures without journal entries")
+    p.add_argument("--threshold", type=int, default=3, help="Failure count threshold (default: 3)")
+    p.add_argument("--json", action="store_true", help="Output raw JSON")
+    p.set_defaults(func=cmd_blind_spots)
+
+    # -- health --
+    p = sub.add_parser("health", help="Ecosystem health summary")
+    p.add_argument("--json", action="store_true", help="Output raw JSON")
+    p.set_defaults(func=cmd_health)
 
     args = parser.parse_args()
 

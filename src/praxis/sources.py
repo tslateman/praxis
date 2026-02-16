@@ -13,6 +13,7 @@ from praxis.config import (
     JOURNAL_FILE,
     MIRROR_DIR,
     NEO_LOGS_DIR,
+    REGISTRY_FILE,
 )
 
 
@@ -97,3 +98,26 @@ def read_mirror_yaml(filename: str) -> list[dict]:
     if isinstance(data, dict):
         return [data]
     return []
+
+
+def read_registry() -> dict:
+    """Read project relationships from Lore registry.
+
+    Returns dict with 'dependencies', 'shared', 'integrations',
+    'pattern_sharing' keys. Missing file returns empty dict with warning.
+    """
+    try:
+        import yaml
+    except ImportError:
+        print(
+            "Warning: PyYAML not installed, cannot read registry",
+            file=sys.stderr,
+        )
+        return {}
+
+    if not REGISTRY_FILE.exists():
+        print(f"Warning: Registry not found at {REGISTRY_FILE}", file=sys.stderr)
+        return {}
+    with open(REGISTRY_FILE) as f:
+        data = yaml.safe_load(f)
+    return data if isinstance(data, dict) else {}

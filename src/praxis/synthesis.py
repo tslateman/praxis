@@ -1,14 +1,17 @@
 """Synthesize actionable views from Lore's data.
 
-Combines intent, failures, inbox, and journal into views that answer:
+Combines intent, failures, inbox, journal, and patterns into views that answer:
 - status: Where am I? What's blocking?
 - next: What should I work on?
 - blockers: What's in the way?
-- health: Ecosystem pulse
+- health: Ecosystem pulse (failures + hygiene)
 - triggers: Recurring failure types
 - friction: Project boundary issues
 - blind_spots: Failures without decisions
 - stale: Observations aging without action
+- ecosystem_overlap: Command name conflicts
+- ecosystem_complexity: Projects exceeding thresholds
+- undocumented: Decisions/patterns without rationale
 """
 
 from collections import Counter
@@ -140,7 +143,8 @@ def health() -> dict:
     """Single-page ecosystem health summary.
     
     Aggregates: failure count, triggers, stale observations, blind spots,
-    friction hotspots. Returns status indicator (healthy/attention/critical).
+    friction hotspots, command overlap, complexity warnings, undocumented items.
+    Returns status indicator (healthy/attention/critical).
     """
     fails = lore.failures()
     week_ago = _now() - timedelta(days=7)
@@ -159,13 +163,22 @@ def health() -> dict:
     blind_spot_results = blind_spots()
     friction_results = friction()
     
+    # Ecosystem hygiene
+    overlap_results = ecosystem_overlap()
+    complexity_results = ecosystem_complexity()
+    undoc_results = undocumented()
+    
     # Determine status
     has_critical_triggers = any(t["count"] >= 5 for t in trigger_results)
     has_blind_spots = blind_spot_results["blind_spot_count"] > 0
+    has_overlap = len(overlap_results) > 0
+    has_complexity = len(complexity_results) > 0
+    has_undocumented = undoc_results["decision_count"] + undoc_results["pattern_count"] > 5
     
     if has_blind_spots or has_critical_triggers:
         status_val = "critical"
-    elif stale_results["stale_count"] > 0 or len(trigger_results) > 0:
+    elif (stale_results["stale_count"] > 0 or len(trigger_results) > 0
+          or has_overlap or has_complexity or has_undocumented):
         status_val = "attention"
     else:
         status_val = "healthy"
@@ -178,11 +191,18 @@ def health() -> dict:
             "stale_count": stale_results["stale_count"],
             "blind_spot_count": blind_spot_results["blind_spot_count"],
             "friction_boundaries": len(friction_results),
+            "overlap_count": len(overlap_results),
+            "complexity_warnings": len(complexity_results),
+            "undocumented_decisions": undoc_results["decision_count"],
+            "undocumented_patterns": undoc_results["pattern_count"],
         },
         "triggers": trigger_results,
         "stale_observations": stale_results["stale_observations"],
         "blind_spots": blind_spot_results["orphaned_failures"],
         "friction": friction_results,
+        "overlap": overlap_results,
+        "complexity": complexity_results,
+        "undocumented": undoc_results,
         "status": status_val,
     }
 
@@ -397,3 +417,153 @@ def correlate(window_hours: int = 24) -> list[dict]:
     
     results.sort(key=lambda r: r["failure"].get("timestamp", ""))
     return results
+
+
+# --- Ecosystem Hygiene ---
+
+def _parse_claude_md_commands(content: str, project: str) -> list[str]:
+    """Extract command names from CLAUDE.md.
+    
+    Handles two formats:
+    1. Code blocks: `project command args`
+    2. Table rows: `| `project command` |`
+    """
+    import re
+    commands = set()
+    
+    # Pattern 1: Code blocks with project commands
+    # Match lines starting with the project name
+    for match in re.finditer(rf'^{re.escape(project)}\s+(\w+)', content, re.MULTILINE):
+        cmd = match.group(1)
+        if cmd and not cmd.startswith('-'):
+            commands.add(cmd)
+    
+    # Pattern 2: Table rows with backtick-wrapped commands
+    for match in re.finditer(rf'\|\s*`{re.escape(project)}\s+(\w+)[^`]*`\s*\|', content):
+        cmd = match.group(1)
+        if cmd and not cmd.startswith('-'):
+            commands.add(cmd)
+    
+    return sorted(commands)
+
+
+def _read_project_commands(project: str) -> list[str]:
+    """Read commands from a project's CLAUDE.md."""
+    from pathlib import Path
+    import os
+    
+    dev_dir = Path(os.environ.get("DEV_DIR", Path.home() / "dev"))
+    claude_md = dev_dir / project / "CLAUDE.md"
+    
+    if not claude_md.exists():
+        return []
+    
+    try:
+        content = claude_md.read_text()
+        return _parse_claude_md_commands(content, project)
+    except (OSError, IOError):
+        return []
+
+
+def ecosystem_overlap() -> list[dict]:
+    """Commands that may confuse users across projects.
+    
+    Scans CLAUDE.md files for command tables and flags:
+    - Commands with identical names in different projects
+    """
+    projects = lore.projects()
+    if not projects:
+        return []
+    
+    # Collect commands per project
+    project_commands: dict[str, list[str]] = {}
+    for proj in projects:
+        cmds = _read_project_commands(proj)
+        if cmds:
+            project_commands[proj] = cmds
+    
+    # Find overlaps
+    command_to_projects: dict[str, list[str]] = {}
+    for proj, cmds in project_commands.items():
+        for cmd in cmds:
+            command_to_projects.setdefault(cmd, []).append(proj)
+    
+    results = []
+    for cmd, projs in sorted(command_to_projects.items()):
+        if len(projs) > 1:
+            results.append({
+                "command": cmd,
+                "projects": sorted(projs),
+                "issue": "same name in multiple projects",
+            })
+    
+    return results
+
+
+def ecosystem_complexity(
+    max_commands: int = 10,
+    max_options: int = 5,
+) -> list[dict]:
+    """Projects with high cognitive load.
+    
+    Flags projects exceeding thresholds for command count.
+    """
+    projects = lore.projects()
+    if not projects:
+        return []
+    
+    results = []
+    for proj in projects:
+        cmds = _read_project_commands(proj)
+        if len(cmds) > max_commands:
+            results.append({
+                "project": proj,
+                "command_count": len(cmds),
+                "threshold": max_commands,
+                "issue": f"exceeds {max_commands} commands",
+            })
+    
+    return results
+
+
+def undocumented() -> dict:
+    """Decisions and patterns lacking rationale.
+    
+    Returns dict with:
+      decisions: decisions without rationale field
+      patterns: patterns without problem or context fields
+      decision_count: count of undocumented decisions
+      pattern_count: count of undocumented patterns
+    """
+    decs = lore.decisions()
+    pats = lore.patterns()
+    
+    undoc_decisions = []
+    for d in decs:
+        if not d.get("rationale"):
+            undoc_decisions.append({
+                "id": d.get("id", "?"),
+                "decision": d.get("decision", "")[:60],
+                "timestamp": d.get("timestamp", "")[:10],
+            })
+    
+    undoc_patterns = []
+    for p in pats:
+        missing = []
+        if not p.get("problem"):
+            missing.append("problem")
+        if not p.get("context"):
+            missing.append("context")
+        if missing:
+            undoc_patterns.append({
+                "id": p.get("id", "?"),
+                "name": p.get("name", ""),
+                "missing": missing,
+            })
+    
+    return {
+        "decisions": undoc_decisions,
+        "patterns": undoc_patterns,
+        "decision_count": len(undoc_decisions),
+        "pattern_count": len(undoc_patterns),
+    }

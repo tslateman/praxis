@@ -108,3 +108,18 @@ def registry() -> dict:
     """Read project relationships. Returns empty dict if missing."""
     data = _read_yaml(LORE_DIR / "registry" / "data" / "relationships.yaml")
     return data if isinstance(data, dict) else {}
+
+
+def patterns() -> list[dict]:
+    """Read learned patterns."""
+    data = _read_yaml(LORE_DIR / "patterns" / "data" / "patterns.yaml")
+    if data and isinstance(data.get("patterns"), list):
+        return data["patterns"]
+    return []
+
+
+def projects() -> list[str]:
+    """List all projects in the registry."""
+    reg = registry()
+    deps = reg.get("dependencies", {})
+    return sorted(deps.keys())

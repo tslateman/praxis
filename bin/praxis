@@ -131,6 +131,10 @@ def cmd_health(args):
     print(f"  Stale: {summary['stale_count']} observations aging without action")
     print(f"  Blind spots: {summary['blind_spot_count']}")
     print(f"  Friction: {summary['friction_boundaries']} project boundaries")
+    print(f"  Overlap: {summary['overlap_count']} command name conflicts")
+    print(f"  Complexity: {summary['complexity_warnings']} projects exceed thresholds")
+    print(f"  Undocumented: {summary['undocumented_decisions']} decisions, "
+          f"{summary['undocumented_patterns']} patterns")
     
     if result["triggers"]:
         print()
@@ -157,6 +161,29 @@ def cmd_health(args):
         print("Friction:")
         for f in result["friction"]:
             print(f"  {f['boundary']}: {f['failure_count']} failures")
+    
+    if result["overlap"]:
+        print()
+        print("Overlap:")
+        for o in result["overlap"]:
+            projs = ", ".join(o["projects"])
+            print(f"  `{o['command']}` — {projs}")
+    
+    if result["complexity"]:
+        print()
+        print("Complexity:")
+        for c in result["complexity"]:
+            print(f"  {c['project']}: {c['command_count']} commands (threshold: {c['threshold']})")
+    
+    undoc = result["undocumented"]
+    if undoc["decisions"] or undoc["patterns"]:
+        print()
+        print("Undocumented:")
+        for d in undoc["decisions"][:5]:
+            print(f"  {d['id']}: \"{d['decision']}\" (no rationale)")
+        for p in undoc["patterns"][:5]:
+            missing = ", ".join(p["missing"])
+            print(f"  {p['id']}: \"{p['name']}\" (missing: {missing})")
 
 
 def cmd_triggers(args):

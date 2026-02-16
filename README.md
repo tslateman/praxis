@@ -77,14 +77,4 @@ No direct file writes. No duplicate storage. Lore is the single source of truth.
 
 ## Development History
 
-Implementation plans in `plans/`:
-
-| Plan                                  | Status   | Added                            |
-| ------------------------------------- | -------- | -------------------------------- |
-| `plan-sources-correlate.md`           | Complete | Data layer, `correlate`, `stale` |
-| `plan-phase-2-friction-blindspots.md` | Complete | `friction`, `blind-spots`        |
-| `plan-phase-3-health.md`              | Complete | `health` dashboard               |
-
-## Provenance
-
-Adapted from `~/dev/praxis-rdx/failure.py`. The executor, proxy, and planner were dropped — Claude Code serves those roles. The failure analysis layer remains, reframed as one input to pragmatic action rather than the whole story.
+See `plans/` for completed implementation plans.

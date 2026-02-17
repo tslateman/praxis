@@ -2,6 +2,26 @@
 
 Operational synthesis layer over Lore. Reads from Lore's memory, synthesizes actionable views.
 
+## Ecosystem
+
+> **You are here: Praxis** -- Supporting (Synthesis)
+
+| Project | Pillar   | Role                        |
+| ------- | -------- | --------------------------- |
+| Lore    | Data     | Memory, registry, intent    |
+| Mirror  | Data     | Judgment capture & patterns |
+| Neo     | Control  | Teams, missions, delegation |
+| Bach    | Action   | Stateless workers           |
+| Council | Advisory | Cross-project decisions     |
+
+Praxis reads from Lore. Full map: ~/dev/council/mainstay/ecosystem.md
+
+## Onboarding
+
+New to the stack? Start with
+[Getting Started](~/dev/council/docs/getting-started.md) -- a 30-minute path
+from zero to productive.
+
 ## Commands
 
 | Command              | Action                                          |

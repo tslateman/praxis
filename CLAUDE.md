@@ -10,9 +10,11 @@ Operational synthesis layer over Lore. Reads from Lore's memory, synthesizes act
 | ------- | -------- | --------------------------- |
 | Lore    | Data     | Memory, registry, intent    |
 | Mirror  | Data     | Judgment capture & patterns |
-| Neo     | Control  | Teams, missions, delegation |
 | Bach    | Action   | Stateless workers           |
 | Council | Advisory | Cross-project decisions     |
+
+Neo and Ralph archived (`dec-fff7bb6e`). Claude Code native teams replace
+custom orchestration.
 
 Praxis reads from Lore. Full map: ~/dev/council/mainstay/ecosystem.md
 

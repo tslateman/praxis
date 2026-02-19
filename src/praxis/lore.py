@@ -8,7 +8,7 @@ Data locations (relative to LORE_DIR):
   inbox/data/observations.jsonl    Raw observations
   journal/data/decisions.jsonl     Decisions with rationale
   intent/data/goals/*.yaml         Goal definitions
-  intent/data/missions/*.yaml      Mission breakdowns
+  intent/missions/*.yaml           Mission breakdowns
   registry/data/relationships.yaml Project relationships
 """
 
@@ -94,7 +94,7 @@ def active_goals() -> list[dict]:
 
 def missions() -> list[dict]:
     """Read all missions."""
-    return _read_yaml_dir(LORE_DIR / "intent" / "data" / "missions")
+    return _read_yaml_dir(LORE_DIR / "intent" / "missions")
 
 
 def pending_missions() -> list[dict]:

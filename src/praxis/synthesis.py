@@ -16,6 +16,7 @@ Combines intent, failures, inbox, journal, and patterns into views that answer:
 - undocumented: Decisions/patterns without rationale
 """
 
+import json
 from collections import Counter
 from datetime import datetime, timedelta, timezone
 
@@ -210,8 +211,6 @@ def context(
             used += cost
             result.append(entry)
         return result
-
-    import json
 
     out_patterns = _add_items(all_patterns, lambda p: {
         "id": p.get("id", ""),

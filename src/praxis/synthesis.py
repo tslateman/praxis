@@ -9,6 +9,8 @@ Combines intent, failures, inbox, journal, and patterns into views that answer:
 - friction: Project boundary issues
 - blind_spots: Failures without decisions
 - stale: Observations aging without action
+- refinement: Decisions ripe for promotion to patterns
+- context: Filtered context brief for agent prompts
 - ecosystem_overlap: Command name conflicts
 - ecosystem_complexity: Projects exceeding thresholds
 - undocumented: Decisions/patterns without rationale
@@ -101,6 +103,162 @@ def next_work() -> list[dict]:
     return sorted(pending, key=priority_key)
 
 
+def context(
+    tags: list[str] | None = None,
+    project: str | None = None,
+    since_days: int | None = None,
+    budget: int = 2000,
+) -> dict:
+    """Filtered context brief for agent prompts.
+
+    Fills sections in priority order (patterns, anti-patterns, decisions,
+    goals) until the token budget is reached. Items matching multiple
+    filters rank higher.
+    """
+    cutoff = None
+    if since_days is not None:
+        cutoff = _now() - timedelta(days=since_days)
+
+    has_filter = bool(tags or project)
+
+    def _estimate_tokens(text: str) -> int:
+        return len(text) // 4
+
+    def _match_score(item: dict) -> int:
+        """Count how many active filters match this item."""
+        score = 0
+        if tags:
+            item_tags = set(item.get("tags", []))
+            item_cat = item.get("category", "")
+            item_text = " ".join([
+                item.get("name", ""),
+                item.get("context", ""),
+                item.get("problem", ""),
+            ]).lower()
+            for tag in tags:
+                tag_lower = tag.lower()
+                if tag_lower in item_tags or tag_lower == item_cat.lower():
+                    score += 2
+                elif tag_lower in item_text:
+                    score += 1
+        if project:
+            proj_lower = project.lower()
+            entities = [e.lower() for e in item.get("entities", [])]
+            item_tags = [t.lower() for t in item.get("tags", [])]
+            projects_list = [p.lower() for p in item.get("projects", [])]
+            if proj_lower in entities or proj_lower in item_tags or proj_lower in projects_list:
+                score += 2
+        return score
+
+    def _within_cutoff(item: dict) -> bool:
+        if cutoff is None:
+            return True
+        for field in ("created_at", "timestamp"):
+            ts_str = item.get(field, "")
+            if ts_str:
+                try:
+                    return _parse_ts(ts_str) >= cutoff
+                except (ValueError, TypeError):
+                    continue
+        return True
+
+    def _filter_and_rank(items: list[dict]) -> list[dict]:
+        scored = []
+        for item in items:
+            if not _within_cutoff(item):
+                continue
+            score = _match_score(item)
+            if has_filter and score == 0:
+                continue
+            scored.append((score, item))
+        # Sort by score descending, then recency
+        scored.sort(key=lambda s: (
+            -s[0],
+            s[1].get("created_at", s[1].get("timestamp", "")),
+        ), reverse=False)
+        scored.sort(key=lambda s: -s[0])
+        return [item for _, item in scored]
+
+    # Gather and filter each section
+    all_patterns = _filter_and_rank(lore.patterns())
+    all_anti = _filter_and_rank(lore.anti_patterns())
+    all_decisions = _filter_and_rank(lore.decisions())
+
+    # For decisions, also sort by recency within same score
+    all_goals = []
+    for g in lore.active_goals():
+        if not has_filter:
+            all_goals.append(g)
+            continue
+        score = _match_score(g)
+        if score > 0:
+            all_goals.append(g)
+
+    # Build output within budget
+    used = 0
+    truncated = False
+
+    def _add_items(items, extract_fn):
+        nonlocal used, truncated
+        result = []
+        for item in items:
+            entry = extract_fn(item)
+            cost = _estimate_tokens(json.dumps(entry))
+            if used + cost > budget * 4:  # budget is tokens, cost is chars/4
+                truncated = True
+                break
+            used += cost
+            result.append(entry)
+        return result
+
+    import json
+
+    out_patterns = _add_items(all_patterns, lambda p: {
+        "id": p.get("id", ""),
+        "name": p.get("name", ""),
+        "solution": p.get("solution", ""),
+        "confidence": p.get("confidence", 0),
+    })
+
+    out_anti = _add_items(all_anti, lambda a: {
+        "id": a.get("id", ""),
+        "name": a.get("name", ""),
+        "risk": a.get("risk", ""),
+        "fix": a.get("fix", ""),
+    })
+
+    out_decisions = _add_items(all_decisions, lambda d: {
+        "id": d.get("id", ""),
+        "decision": d.get("title", "") or d.get("decision", ""),
+        "rationale": d.get("rationale", ""),
+        "outcome": d.get("outcome", ""),
+    })
+
+    out_goals = _add_items(all_goals, lambda g: {
+        "id": g.get("id", ""),
+        "name": g.get("name", ""),
+        "status": g.get("status", ""),
+        "success_criteria": [
+            sc.get("description", sc) if isinstance(sc, dict) else sc
+            for sc in g.get("success_criteria", [])
+        ],
+    })
+
+    return {
+        "patterns": out_patterns,
+        "anti_patterns": out_anti,
+        "decisions": out_decisions,
+        "goals": out_goals,
+        "filters_applied": {
+            "tags": tags or [],
+            "project": project or "",
+            "since_days": since_days,
+        },
+        "token_estimate": used,
+        "truncated": truncated,
+    }
+
+
 def blockers_view() -> dict:
     """What's in the way? Failures, stale observations, friction points.
     
@@ -162,7 +320,8 @@ def health() -> dict:
     stale_results = stale()
     blind_spot_results = blind_spots()
     friction_results = friction()
-    
+    refinement_results = refinement()
+
     # Ecosystem hygiene
     overlap_results = ecosystem_overlap()
     complexity_results = ecosystem_complexity()
@@ -174,11 +333,15 @@ def health() -> dict:
     has_overlap = len(overlap_results) > 0
     has_complexity = len(complexity_results) > 0
     has_undocumented = undoc_results["decision_count"] + undoc_results["pattern_count"] > 5
-    
+    refinement_total = (refinement_results["cluster_count"]
+                        + refinement_results["chain_count"]
+                        + refinement_results["aging_count"])
+
     if has_blind_spots or has_critical_triggers:
         status_val = "critical"
     elif (stale_results["stale_count"] > 0 or len(trigger_results) > 0
-          or has_overlap or has_complexity or has_undocumented):
+          or has_overlap or has_complexity or has_undocumented
+          or refinement_total > 0):
         status_val = "attention"
     else:
         status_val = "healthy"
@@ -195,11 +358,13 @@ def health() -> dict:
             "complexity_warnings": len(complexity_results),
             "undocumented_decisions": undoc_results["decision_count"],
             "undocumented_patterns": undoc_results["pattern_count"],
+            "refinement_count": refinement_total,
         },
         "triggers": trigger_results,
         "stale_observations": stale_results["stale_observations"],
         "blind_spots": blind_spot_results["orphaned_failures"],
         "friction": friction_results,
+        "refinement": refinement_results,
         "overlap": overlap_results,
         "complexity": complexity_results,
         "undocumented": undoc_results,
@@ -380,6 +545,163 @@ def blind_spots(threshold: int = 3) -> dict:
     return {
         "orphaned_failures": orphaned,
         "blind_spot_count": len(orphaned),
+        "suggestions": suggestions,
+    }
+
+
+def refinement(min_cluster: int = 3, stale_days: int = 14) -> dict:
+    """Decisions ripe for promotion to patterns.
+
+    Surfaces three signals:
+    1. Tag clusters — tags with min_cluster+ decisions but no pattern.
+    2. Decision chains — related_decisions forming chains of min_cluster+
+       without a corresponding pattern.
+    3. Aging decisions — older than stale_days with no outcome or pending.
+    """
+    decs = lore.decisions()
+    pats = lore.patterns()
+
+    # -- Tag clusters --
+    # Build searchable text from each pattern
+    pattern_text = []
+    for p in pats:
+        parts = [
+            p.get("name", ""),
+            p.get("context", ""),
+            p.get("problem", ""),
+            p.get("category", ""),
+        ]
+        pattern_text.append(" ".join(parts).lower())
+    combined_pattern_text = " ".join(pattern_text)
+
+    # Group decisions by tag
+    tag_decisions: dict[str, list[dict]] = {}
+    for d in decs:
+        for tag in d.get("tags", []):
+            if tag:
+                tag_decisions.setdefault(tag, []).append(d)
+
+    tag_clusters = []
+    for tag, tag_decs in sorted(tag_decisions.items()):
+        if len(tag_decs) < min_cluster:
+            continue
+        if tag.lower() in combined_pattern_text:
+            continue
+        tag_clusters.append({
+            "tag": tag,
+            "decision_count": len(tag_decs),
+            "decisions": [d.get("id", "?") for d in tag_decs],
+            "suggestion": f'lore learn "{tag} pattern" --problem "what it solves"',
+        })
+
+    # -- Decision chains --
+    # Build adjacency from related_decisions
+    adjacency: dict[str, set[str]] = {}
+    dec_by_id: dict[str, dict] = {}
+    for d in decs:
+        did = d.get("id", "")
+        if not did:
+            continue
+        dec_by_id[did] = d
+        adjacency.setdefault(did, set())
+        for rel in d.get("related_decisions", []):
+            if rel:
+                adjacency.setdefault(did, set()).add(rel)
+                adjacency.setdefault(rel, set()).add(did)
+
+    # Find connected components via BFS
+    visited: set[str] = set()
+    components: list[list[str]] = []
+    for node in adjacency:
+        if node in visited:
+            continue
+        component = []
+        queue = [node]
+        while queue:
+            current = queue.pop(0)
+            if current in visited:
+                continue
+            visited.add(current)
+            component.append(current)
+            for neighbor in adjacency.get(current, set()):
+                if neighbor not in visited:
+                    queue.append(neighbor)
+        components.append(component)
+
+    # Check if any pattern shares tags with the chain
+    pattern_tags = set()
+    for p in pats:
+        cat = p.get("category", "")
+        if cat:
+            pattern_tags.add(cat.lower())
+
+    decision_chains = []
+    for comp in components:
+        if len(comp) < min_cluster:
+            continue
+        # Collect tags from all decisions in the chain
+        chain_tags = set()
+        for did in comp:
+            d = dec_by_id.get(did, {})
+            for tag in d.get("tags", []):
+                if tag:
+                    chain_tags.add(tag.lower())
+        # Skip if a pattern already covers this chain's tags
+        if chain_tags & pattern_tags:
+            continue
+        # Determine topic from the first decision with a title
+        root = comp[0]
+        topic = dec_by_id.get(root, {}).get("title", "") or dec_by_id.get(root, {}).get("decision", "")
+        decision_chains.append({
+            "root": root,
+            "chain_size": len(comp),
+            "decisions": sorted(comp),
+            "topic": topic,
+            "suggestion": f"Consolidate {len(comp)} related decisions into a pattern",
+        })
+
+    # -- Aging decisions --
+    threshold = timedelta(days=stale_days)
+    now = _now()
+    aging = []
+    for d in decs:
+        outcome = d.get("outcome", "")
+        if outcome and outcome != "pending":
+            continue
+        try:
+            ts = _parse_ts(d.get("timestamp", ""))
+        except (ValueError, TypeError):
+            continue
+        age = now - ts
+        if age > threshold:
+            aging.append({
+                "id": d.get("id", "?"),
+                "decision": d.get("title", "") or d.get("decision", ""),
+                "timestamp": d.get("timestamp", "")[:10],
+                "age_days": age.days,
+                "outcome": outcome or "none",
+            })
+
+    aging.sort(key=lambda a: -a["age_days"])
+
+    # -- Suggestions --
+    suggestions = []
+    for tc in tag_clusters:
+        suggestions.append(
+            f"Consolidate {tc['decision_count']} {tc['tag']} decisions into a pattern"
+        )
+    for dc in decision_chains:
+        suggestions.append(dc["suggestion"])
+    for a in aging[:3]:
+        suggestions.append(f"Resolve or close {a['id']}: \"{a['decision']}\"")
+
+    return {
+        "tag_clusters": tag_clusters,
+        "decision_chains": decision_chains,
+        "aging": aging,
+        "cluster_count": len(tag_clusters),
+        "chain_count": len(decision_chains),
+        "aging_count": len(aging),
         "suggestions": suggestions,
     }
 

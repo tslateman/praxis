@@ -35,6 +35,8 @@ from zero to productive.
 | `praxis triggers`    | Error types hitting Rule of Three               |
 | `praxis friction`    | Failures at project boundaries                  |
 | `praxis blind-spots` | Recurring failures without decisions            |
+| `praxis refinement`  | Decisions ripe for promotion to patterns        |
+| `praxis context`     | Filtered context brief for agent prompts        |
 | `praxis stale`       | Observations aging without action               |
 
 ## Architecture

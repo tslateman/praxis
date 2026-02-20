@@ -118,6 +118,14 @@ def patterns() -> list[dict]:
     return []
 
 
+def anti_patterns() -> list[dict]:
+    """Read anti-patterns."""
+    data = _read_yaml(LORE_DIR / "patterns" / "data" / "patterns.yaml")
+    if data and isinstance(data.get("anti_patterns"), list):
+        return data["anti_patterns"]
+    return []
+
+
 def projects() -> list[str]:
     """List all projects in the registry."""
     reg = registry()

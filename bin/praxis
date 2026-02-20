@@ -135,7 +135,8 @@ def cmd_health(args):
     print(f"  Complexity: {summary['complexity_warnings']} projects exceed thresholds")
     print(f"  Undocumented: {summary['undocumented_decisions']} decisions, "
           f"{summary['undocumented_patterns']} patterns")
-    
+    print(f"  Refinement: {summary['refinement_count']} opportunities")
+
     if result["triggers"]:
         print()
         print("Triggers:")
@@ -275,6 +276,143 @@ def cmd_blind_spots(args):
     print(f"Total: {result['blind_spot_count']} blind spots")
 
 
+def cmd_refinement(args):
+    """Decisions ripe for promotion to patterns."""
+    result = synthesis.refinement(
+        min_cluster=args.min_cluster,
+        stale_days=args.stale_days,
+    )
+
+    if args.json:
+        print(json.dumps(result, indent=2))
+        return
+
+    total = result["cluster_count"] + result["chain_count"] + result["aging_count"]
+    if total == 0:
+        print("No refinement opportunities found.")
+        return
+
+    print("Refinement Opportunities:")
+
+    if result["tag_clusters"]:
+        print()
+        print("Tag Clusters (unrefined themes):")
+        for tc in result["tag_clusters"]:
+            print(f"  {tc['tag']}: {tc['decision_count']} decisions, no pattern")
+            print(f"    Suggestion: {tc['suggestion']}")
+
+    if result["decision_chains"]:
+        print()
+        print("Decision Chains (revisited topics):")
+        for dc in result["decision_chains"]:
+            chain_str = " → ".join(dc["decisions"][:4])
+            if dc["chain_size"] > 4:
+                chain_str += f" (+{dc['chain_size'] - 4} more)"
+            print(f"  {chain_str} ({dc['chain_size']} decisions)")
+            if dc["topic"]:
+                print(f"    Topic: {dc['topic']}")
+
+    if result["aging"]:
+        print()
+        print("Aging Decisions (unresolved):")
+        for a in result["aging"]:
+            print(f"  {a['id']}  {a['timestamp']}  "
+                  f"\"{a['decision']}\" ({a['age_days']} days, {a['outcome']})")
+
+    print()
+    print(f"Summary: {result['cluster_count']} clusters, "
+          f"{result['chain_count']} chains, "
+          f"{result['aging_count']} aging decisions")
+
+
+def cmd_context(args):
+    """Filtered context brief for agent prompts."""
+    result = synthesis.context(
+        tags=args.tags,
+        project=args.project,
+        since_days=args.since_days,
+        budget=args.budget,
+    )
+
+    if args.json:
+        print(json.dumps(result, indent=2))
+        return
+
+    # Build header
+    parts = []
+    if args.tags:
+        parts.append(f"tags={','.join(args.tags)}")
+    if args.project:
+        parts.append(f"project={args.project}")
+    if args.since_days:
+        parts.append(f"since={args.since_days}d")
+    header = f"Context: {' '.join(parts)}" if parts else "Context: (all)"
+    print(header)
+
+    if result["patterns"]:
+        print()
+        print("Patterns:")
+        for p in result["patterns"]:
+            conf = p.get("confidence", 0)
+            print(f"  {p['name']}")
+            if p.get("solution"):
+                # Wrap long solutions
+                sol = p["solution"]
+                if len(sol) > 72:
+                    words = sol.split()
+                    lines = []
+                    line = ""
+                    for w in words:
+                        if line and len(line) + len(w) + 1 > 68:
+                            lines.append(line)
+                            line = w
+                        else:
+                            line = f"{line} {w}" if line else w
+                    if line:
+                        lines.append(line)
+                    for ln in lines:
+                        print(f"    {ln}")
+                else:
+                    print(f"    {sol}")
+                print(f"    (confidence: {conf})")
+
+    if result["anti_patterns"]:
+        print()
+        print("Anti-patterns:")
+        for a in result["anti_patterns"]:
+            print(f"  {a['name']}")
+            if a.get("risk"):
+                print(f"    Risk: {a['risk']}")
+            if a.get("fix"):
+                print(f"    Fix: {a['fix']}")
+
+    if result["decisions"]:
+        print()
+        print("Decisions:")
+        for d in result["decisions"]:
+            outcome = f" ({d['outcome']})" if d.get("outcome") else ""
+            print(f"  {d['id']}  {d['decision']}{outcome}")
+            if d.get("rationale"):
+                print(f"    Rationale: {d['rationale']}")
+
+    if result["goals"]:
+        print()
+        print("Goals:")
+        for g in result["goals"]:
+            print(f"  {g['id']}  {g['name']} [{g.get('status', '?')}]")
+            for sc in g.get("success_criteria", []):
+                print(f"    - {sc}")
+
+    if not any([result["patterns"], result["anti_patterns"],
+                result["decisions"], result["goals"]]):
+        print()
+        print("(no matching items)")
+
+    print()
+    trunc = " (truncated)" if result["truncated"] else ""
+    print(f"~{result['token_estimate']} tokens{trunc}")
+
+
 def cmd_correlate(args):
     """Failures alongside nearby decisions."""
     results = synthesis.correlate(window_hours=args.window)
@@ -340,7 +478,15 @@ def main():
     p = sub.add_parser("health", help="Ecosystem health summary")
     p.add_argument("--json", action="store_true", help="Output raw JSON")
     p.set_defaults(func=cmd_health)
-    
+
+    p = sub.add_parser("context", help="Filtered context brief for agent prompts")
+    p.add_argument("--tags", nargs="+", help="Filter by tags")
+    p.add_argument("--project", help="Filter by project name")
+    p.add_argument("--since", type=int, dest="since_days", help="Days of recency (default: all)")
+    p.add_argument("--budget", type=int, default=2000, help="Token budget (default: 2000)")
+    p.add_argument("--json", action="store_true", help="Output raw JSON")
+    p.set_defaults(func=cmd_context)
+
     # -- Analysis commands --
     
     p = sub.add_parser("triggers", help="Error types hitting Rule of Three")
@@ -362,6 +508,12 @@ def main():
     p.add_argument("--json", action="store_true", help="Output raw JSON")
     p.set_defaults(func=cmd_blind_spots)
     
+    p = sub.add_parser("refinement", help="Decisions ripe for promotion to patterns")
+    p.add_argument("--min-cluster", type=int, default=3, help="Tag cluster threshold (default: 3)")
+    p.add_argument("--stale-days", type=int, default=14, help="Aging threshold in days (default: 14)")
+    p.add_argument("--json", action="store_true", help="Output raw JSON")
+    p.set_defaults(func=cmd_refinement)
+
     p = sub.add_parser("correlate", help="Failures alongside nearby decisions")
     p.add_argument("--window", type=int, default=24, help="Hours (default: 24)")
     p.add_argument("--json", action="store_true", help="Output raw JSON")

@@ -26,18 +26,21 @@ from zero to productive.
 
 ## Commands
 
-| Command              | Action                                          |
-| -------------------- | ----------------------------------------------- |
-| `praxis status`      | Active goals, current blockers, ecosystem pulse |
-| `praxis next`        | Prioritized work queue                          |
-| `praxis blockers`    | Failures, stale items, friction points          |
-| `praxis health`      | Single-page ecosystem summary                   |
-| `praxis triggers`    | Error types hitting Rule of Three               |
-| `praxis friction`    | Failures at project boundaries                  |
-| `praxis blind-spots` | Recurring failures without decisions            |
-| `praxis refinement`  | Decisions ripe for promotion to patterns        |
-| `praxis context`     | Filtered context brief for agent prompts        |
-| `praxis stale`       | Observations aging without action               |
+| Command               | Action                                          |
+| --------------------- | ----------------------------------------------- |
+| `praxis status`       | Active goals, current blockers, ecosystem pulse |
+| `praxis next`         | Prioritized work queue                          |
+| `praxis blockers`     | Failures, stale items, friction points          |
+| `praxis health`       | Single-page ecosystem summary                   |
+| `praxis triggers`     | Error types hitting Rule of Three               |
+| `praxis friction`     | Failures at project boundaries                  |
+| `praxis blind-spots`  | Recurring failures without decisions            |
+| `praxis refinement`   | Decisions ripe for promotion to patterns        |
+| `praxis context`      | Filtered context brief for agent prompts        |
+| `praxis stale`        | Observations aging without action               |
+| `praxis overlap`      | Command name conflicts across projects          |
+| `praxis complexity`   | Projects exceeding complexity thresholds        |
+| `praxis undocumented` | Decisions and patterns lacking rationale        |
 
 ## Architecture
 

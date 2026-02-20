@@ -14,13 +14,57 @@ Data locations (relative to LORE_DIR):
 
 import json
 import os
+import threading
+import time
+from functools import wraps
 from pathlib import Path
 
 import yaml
 
 LORE_DIR = Path(os.environ.get("LORE_DIR", Path.home() / "dev/lore"))
 
+# --- TTL Cache ---
 
+_DEFAULT_TTL = 30  # seconds
+
+_cache_store: dict[tuple, tuple[float, object]] = {}
+_cache_lock = threading.Lock()
+
+
+def _ttl_cache(ttl: float = _DEFAULT_TTL):
+    """Decorator that caches return values with a time-to-live.
+
+    Cache key is function name + stringified args. Thread-safe via lock.
+    """
+
+    def decorator(fn):
+        @wraps(fn)
+        def wrapper(*args, **kwargs):
+            key = (fn.__name__, str(args), str(sorted(kwargs.items())))
+            now = time.monotonic()
+            with _cache_lock:
+                if key in _cache_store:
+                    ts, value = _cache_store[key]
+                    if now - ts < ttl:
+                        return value
+            # Read outside the lock to avoid holding it during I/O
+            result = fn(*args, **kwargs)
+            with _cache_lock:
+                _cache_store[key] = (time.monotonic(), result)
+            return result
+
+        return wrapper
+
+    return decorator
+
+
+def cache_clear() -> None:
+    """Invalidate all cached reader results."""
+    with _cache_lock:
+        _cache_store.clear()
+
+
+@_ttl_cache()
 def _read_jsonl(path: Path) -> list[dict]:
     """Read a JSONL file. Missing file returns empty list."""
     if not path.exists():
@@ -34,6 +78,7 @@ def _read_jsonl(path: Path) -> list[dict]:
     return results
 
 
+@_ttl_cache()
 def _read_yaml(path: Path) -> dict | None:
     """Read a YAML file. Missing file returns None."""
     if not path.exists():
@@ -42,6 +87,7 @@ def _read_yaml(path: Path) -> dict | None:
         return yaml.safe_load(f)
 
 
+@_ttl_cache()
 def _read_yaml_dir(directory: Path) -> list[dict]:
     """Read all YAML files in a directory."""
     if not directory.exists():
@@ -56,12 +102,14 @@ def _read_yaml_dir(directory: Path) -> list[dict]:
 
 # --- Failures ---
 
+
 def failures() -> list[dict]:
     """Read failure reports."""
     return _read_jsonl(LORE_DIR / "failures" / "data" / "failures.jsonl")
 
 
 # --- Inbox ---
+
 
 def observations() -> list[dict]:
     """Read inbox observations."""
@@ -75,12 +123,14 @@ def raw_observations() -> list[dict]:
 
 # --- Journal ---
 
+
 def decisions() -> list[dict]:
     """Read journal decisions."""
     return _read_jsonl(LORE_DIR / "journal" / "data" / "decisions.jsonl")
 
 
 # --- Intent ---
+
 
 def goals() -> list[dict]:
     """Read all goals."""
@@ -99,10 +149,15 @@ def missions() -> list[dict]:
 
 def pending_missions() -> list[dict]:
     """Read missions not yet completed."""
-    return [m for m in missions() if m.get("status") not in ("completed", "failed", "cancelled")]
+    return [
+        m
+        for m in missions()
+        if m.get("status") not in ("completed", "failed", "cancelled")
+    ]
 
 
 # --- Registry ---
+
 
 def registry() -> dict:
     """Read project relationships. Returns empty dict if missing."""

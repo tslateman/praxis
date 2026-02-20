@@ -338,6 +338,8 @@ def cmd_context(args):
         print(json.dumps(result, indent=2))
         return
 
+    debug = args.debug
+
     # Build header
     parts = []
     if args.tags:
@@ -349,12 +351,17 @@ def cmd_context(args):
     header = f"Context: {' '.join(parts)}" if parts else "Context: (all)"
     print(header)
 
+    def _score_suffix(item):
+        if debug:
+            return f"  [{item.get('_score', 0)}]"
+        return ""
+
     if result["patterns"]:
         print()
         print("Patterns:")
         for p in result["patterns"]:
             conf = p.get("confidence", 0)
-            print(f"  {p['name']}")
+            print(f"  {p['name']}{_score_suffix(p)}")
             if p.get("solution"):
                 # Wrap long solutions
                 sol = p["solution"]
@@ -380,7 +387,7 @@ def cmd_context(args):
         print()
         print("Anti-patterns:")
         for a in result["anti_patterns"]:
-            print(f"  {a['name']}")
+            print(f"  {a['name']}{_score_suffix(a)}")
             if a.get("risk"):
                 print(f"    Risk: {a['risk']}")
             if a.get("fix"):
@@ -391,7 +398,7 @@ def cmd_context(args):
         print("Decisions:")
         for d in result["decisions"]:
             outcome = f" ({d['outcome']})" if d.get("outcome") else ""
-            print(f"  {d['id']}  {d['decision']}{outcome}")
+            print(f"  {d['id']}  {d['decision']}{outcome}{_score_suffix(d)}")
             if d.get("rationale"):
                 print(f"    Rationale: {d['rationale']}")
 
@@ -399,9 +406,15 @@ def cmd_context(args):
         print()
         print("Goals:")
         for g in result["goals"]:
-            print(f"  {g['id']}  {g['name']} [{g.get('status', '?')}]")
+            print(f"  {g['id']}  {g['name']} [{g.get('status', '?')}]{_score_suffix(g)}")
             for sc in g.get("success_criteria", []):
                 print(f"    - {sc}")
+
+    if result.get("contentions"):
+        print()
+        print("Contentions:")
+        for c in result["contentions"]:
+            print(f"  {c['tag']}: {c['a']} vs {c['b']} ({c['outcomes']})")
 
     if not any([result["patterns"], result["anti_patterns"],
                 result["decisions"], result["goals"]]):
@@ -484,6 +497,7 @@ def main():
     p.add_argument("--project", help="Filter by project name")
     p.add_argument("--since", type=int, dest="since_days", help="Days of recency (default: all)")
     p.add_argument("--budget", type=int, default=2000, help="Token budget (default: 2000)")
+    p.add_argument("--debug", action="store_true", help="Show relevance scores")
     p.add_argument("--json", action="store_true", help="Output raw JSON")
     p.set_defaults(func=cmd_context)
 

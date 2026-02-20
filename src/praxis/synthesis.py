@@ -17,6 +17,7 @@ Combines intent, failures, inbox, journal, and patterns into views that answer:
 """
 
 import json
+import math
 from collections import Counter
 from datetime import datetime, timedelta, timezone
 
@@ -118,24 +119,26 @@ def context(
     """Filtered context brief for agent prompts.
 
     Fills sections in priority order (patterns, anti-patterns, decisions,
-    goals) until the token budget is reached. Items matching multiple
-    filters rank higher.
+    goals) until the token budget is reached. Composite relevance score:
+      relevance = 5.0 * filter + 2.0 * recency + 1.5 * quality + 1.0 * activity
     """
     cutoff = None
     if since_days is not None:
         cutoff = _now() - timedelta(days=since_days)
 
     has_filter = bool(tags or project)
+    now = _now()
 
     def _estimate_tokens(text: str) -> int:
         return len(text) // 4
 
-    def _match_score(item: dict) -> int:
-        """Count how many active filters match this item."""
-        score = 0
+    # --- Signal 1: Filter Match (weight 5.0) ---
+
+    def _filter_score(item: dict) -> float:
+        raw = 0
         if tags:
-            item_tags = set(item.get("tags", []))
-            item_cat = item.get("category", "")
+            item_tags = set(t.lower() for t in item.get("tags", []))
+            item_cat = item.get("category", "").lower()
             item_text = " ".join(
                 [
                     item.get("name", ""),
@@ -145,22 +148,107 @@ def context(
             ).lower()
             for tag in tags:
                 tag_lower = tag.lower()
-                if tag_lower in item_tags or tag_lower == item_cat.lower():
-                    score += 2
+                if tag_lower in item_tags or tag_lower == item_cat:
+                    raw += 2
                 elif tag_lower in item_text:
-                    score += 1
+                    raw += 1
         if project:
             proj_lower = project.lower()
             entities = [e.lower() for e in item.get("entities", [])]
-            item_tags = [t.lower() for t in item.get("tags", [])]
+            item_tags_l = [t.lower() for t in item.get("tags", [])]
             projects_list = [p.lower() for p in item.get("projects", [])]
             if (
                 proj_lower in entities
-                or proj_lower in item_tags
+                or proj_lower in item_tags_l
                 or proj_lower in projects_list
             ):
-                score += 2
-        return score
+                raw += 2
+        max_raw = 2 * len(tags or []) + 2 * bool(project)
+        return raw / max_raw if max_raw > 0 else 0.0
+
+    # --- Signal 2: Recency Decay (weight 2.0, half-life 14 days) ---
+
+    def _recency_score(item: dict) -> float:
+        for field in ("timestamp", "created_at"):
+            ts_str = item.get(field, "")
+            if ts_str:
+                try:
+                    ts = _parse_ts(ts_str)
+                    age_days = (now - ts).total_seconds() / 86400.0
+                    return math.pow(0.5, age_days / 14.0)
+                except (ValueError, TypeError):
+                    continue
+        return 0.0
+
+    # --- Signal 3: Quality / Consequence (weight 1.5) ---
+
+    _outcome_map = {
+        "successful": 0.9,
+        "accepted": 0.8,
+        "pending": 0.5,
+        "revised": 0.3,
+    }
+    _severity_map = {"critical": 1.0, "high": 0.8, "medium": 0.5, "low": 0.2}
+    _priority_map = {"critical": 1.0, "high": 0.8, "medium": 0.5, "low": 0.2}
+    _goal_status_map = {"active": 1.0, "paused": 0.3, "archived": 0.0}
+
+    def _quality_score(item: dict, data_type: str) -> float:
+        if data_type == "patterns":
+            conf = float(item.get("confidence", 0))
+            validations = float(item.get("validations", 0))
+            spec_q = float(item.get("spec_quality", 0))
+            return 0.5 * conf + 0.3 * min(validations / 10.0, 1.0) + 0.2 * spec_q
+        if data_type == "anti_patterns":
+            return _severity_map.get(item.get("severity", "medium"), 0.5)
+        if data_type == "decisions":
+            outcome_val = _outcome_map.get(item.get("outcome", ""), 0.5)
+            spec_q = float(item.get("spec_quality", 0))
+            has_lesson = 1.0 if item.get("lesson_learned") else 0.0
+            return 0.6 * outcome_val + 0.3 * spec_q + 0.1 * has_lesson
+        if data_type == "goals":
+            pri_val = _priority_map.get(item.get("priority", "medium"), 0.5)
+            sta_val = _goal_status_map.get(item.get("status", ""), 0.0)
+            return 0.6 * pri_val + 0.4 * sta_val
+        return 0.0
+
+    # --- Signal 4: Activity Proximity (weight 1.0) ---
+
+    def _build_active_context() -> tuple[set, set]:
+        active_tags: set[str] = set()
+        active_projects: set[str] = set()
+        for g in lore.active_goals():
+            for t in g.get("tags", []):
+                active_tags.add(t.lower())
+            cat = g.get("category", "")
+            if cat:
+                active_tags.add(cat.lower())
+            for p in g.get("projects", []):
+                active_projects.add(p.lower())
+        return active_tags, active_projects
+
+    active_tags, active_projects = _build_active_context()
+
+    def _activity_score(item: dict) -> float:
+        item_tags = set(t.lower() for t in item.get("tags", []))
+        item_cat = item.get("category", "").lower()
+        if item_cat:
+            item_tags.add(item_cat)
+        item_projects = set(p.lower() for p in item.get("projects", []))
+        if item_tags & active_tags or item_projects & active_projects:
+            return 1.0
+        return 0.0
+
+    # --- Composite Score ---
+
+    def _composite_score(item: dict, data_type: str) -> float:
+        return (
+            5.0 * _filter_score(item)
+            + 2.0 * _recency_score(item)
+            + 1.5 * _quality_score(item, data_type)
+            + 1.0 * _activity_score(item)
+        )
+
+    # --- Filter, Rank, Deduplicate ---
 
     def _within_cutoff(item: dict) -> bool:
         if cutoff is None:
@@ -174,8 +262,8 @@ def context(
                     continue
         return True
 
-    def _filter_and_rank(items: list[dict]) -> list[dict]:
-        scored = []
+    def _filter_and_rank(items: list[dict], data_type: str) -> list[tuple[float, dict]]:
+        scored: list[tuple[float, dict]] = []
         seen_ids: set[str] = set()
         for item in items:
             item_id = item.get("id", "")
@@ -185,47 +273,123 @@ def context(
                 seen_ids.add(item_id)
             if not _within_cutoff(item):
                 continue
-            score = _match_score(item)
-            if has_filter and score == 0:
+            if has_filter and _filter_score(item) == 0.0:
                 continue
+            score = _composite_score(item, data_type)
             scored.append((score, item))
-        # Sort by score descending, then recency
+        # Sort by score descending, then timestamp descending
         scored.sort(
             key=lambda s: (
                 -s[0],
-                s[1].get("created_at", s[1].get("timestamp", "")),
-            ),
-            reverse=False,
+                -(
+                    _parse_ts(
+                        s[1].get("timestamp", s[1].get("created_at", ""))
+                        or "1970-01-01T00:00:00Z"
+                    ).timestamp()
+                ),
+            )
         )
-        scored.sort(key=lambda s: -s[0])
-        return [item for _, item in scored]
+        return scored
 
-    # Gather and filter each section
-    all_patterns = _filter_and_rank(lore.patterns())
-    all_anti = _filter_and_rank(lore.anti_patterns())
-    all_decisions = _filter_and_rank(lore.decisions())
+    # --- Contention Detection ---
 
-    # For decisions, also sort by recency within same score
-    all_goals = []
-    for g in lore.active_goals():
-        if not has_filter:
-            all_goals.append(g)
-            continue
-        score = _match_score(g)
-        if score > 0:
-            all_goals.append(g)
+    _conflict_outcomes = {
+        frozenset({"revised", "pending"}),
+        frozenset({"revised", "accepted"}),
+        frozenset({"revised", "successful"}),
+    }
+
+    def _detect_contention(
+        ranked_items: list[tuple[float, dict]], data_type: str
+    ) -> list[dict]:
+        contentions: list[dict] = []
+        seen_pairs: set[frozenset[str]] = set()
+        items = [item for _, item in ranked_items]
+        if data_type == "decisions":
+            # Group by shared tags — flag divergent outcomes
+            tag_groups: dict[str, list[dict]] = {}
+            for item in items:
+                for t in item.get("tags", []):
+                    tag_groups.setdefault(t.lower(), []).append(item)
+            for tag, group in tag_groups.items():
+                if len(group) < 2:
+                    continue
+                outcomes = [d.get("outcome", "") for d in group]
+                for i in range(len(group)):
+                    for j in range(i + 1, len(group)):
+                        pair = frozenset({outcomes[i], outcomes[j]})
+                        if pair not in _conflict_outcomes:
+                            continue
+                        id_pair = frozenset(
+                            {group[i].get("id", ""), group[j].get("id", "")}
+                        )
+                        if id_pair in seen_pairs:
+                            continue
+                        seen_pairs.add(id_pair)
+                        contentions.append(
+                            {
+                                "tag": tag,
+                                "a": group[i].get("id", ""),
+                                "b": group[j].get("id", ""),
+                                "outcomes": f"{outcomes[i]} vs {outcomes[j]}",
+                            }
+                        )
+        elif data_type == "patterns":
+            # Same category + shared tags = contention
+            cat_groups: dict[str, list[dict]] = {}
+            for item in items:
+                cat = item.get("category", "").lower()
+                if cat:
+                    cat_groups.setdefault(cat, []).append(item)
+            for cat, group in cat_groups.items():
+                if len(group) < 2:
+                    continue
+                for i in range(len(group)):
+                    tags_i = set(t.lower() for t in group[i].get("tags", []))
+                    for j in range(i + 1, len(group)):
+                        tags_j = set(t.lower() for t in group[j].get("tags", []))
+                        shared = tags_i & tags_j
+                        if not shared:
+                            continue
+                        id_pair = frozenset(
+                            {group[i].get("id", ""), group[j].get("id", "")}
+                        )
+                        if id_pair in seen_pairs:
+                            continue
+                        seen_pairs.add(id_pair)
+                        contentions.append(
+                            {
+                                "tag": cat,
+                                "a": group[i].get("id", ""),
+                                "b": group[j].get("id", ""),
+                                "outcomes": "different solutions",
+                            }
+                        )
+        return contentions
+
+    # Gather and rank each section
+    all_patterns = _filter_and_rank(lore.patterns(), "patterns")
+    all_anti = _filter_and_rank(lore.anti_patterns(), "anti_patterns")
+    all_decisions = _filter_and_rank(lore.decisions(), "decisions")
+    all_goals = _filter_and_rank(lore.active_goals(), "goals")
+
+    # Detect contentions before budget filling
+    contentions = _detect_contention(all_decisions, "decisions") + _detect_contention(
+        all_patterns, "patterns"
+    )
 
     # Build output within budget
     used = 0
     truncated = False
 
-    def _add_items(items, extract_fn):
+    def _add_items(scored_items, extract_fn):
         nonlocal used, truncated
         result = []
-        for item in items:
+        for score, item in scored_items:
             entry = extract_fn(item)
+            entry["_score"] = round(score, 2)
             cost = _estimate_tokens(json.dumps(entry))
-            if used + cost > budget * 4:  # budget is tokens, cost is chars/4
+            if used + cost > budget:
                 truncated = True
                 break
             used += cost
@@ -280,6 +444,7 @@ def context(
         "anti_patterns": out_anti,
         "decisions": out_decisions,
         "goals": out_goals,
+        "contentions": contentions,
         "filters_applied": {
             "tags": tags or [],
             "project": project or "",

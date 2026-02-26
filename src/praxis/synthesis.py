@@ -872,7 +872,9 @@ def refinement(min_cluster: int = 3, stale_days: int = 14) -> dict:
                 "chain_size": len(comp),
                 "decisions": sorted(comp),
                 "topic": topic,
-                "suggestion": f"Consolidate {len(comp)} related decisions into a pattern",
+                "suggestion": (
+                    f"Consolidate {len(comp)} related decisions" " into a pattern"
+                ),
             }
         )
 
@@ -993,8 +995,8 @@ def _parse_claude_md_commands(content: str, project: str) -> list[str]:
 
 def _read_project_commands(project: str) -> list[str]:
     """Read commands from a project's CLAUDE.md."""
-    from pathlib import Path
     import os
+    from pathlib import Path
 
     dev_dir = Path(os.environ.get("DEV_DIR", Path.home() / "dev"))
     claude_md = dev_dir / project / "CLAUDE.md"

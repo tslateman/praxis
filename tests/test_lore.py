@@ -6,7 +6,6 @@ import yaml
 
 from praxis import lore
 
-
 # --- Failures ---
 
 

@@ -4,10 +4,10 @@ Operational synthesis layer over Lore. Reads from Lore's memory,
 synthesizes actionable views.
 """
 
+import argparse
 import json
 import subprocess
 import sys
-import argparse
 
 from praxis import synthesis
 
@@ -178,12 +178,13 @@ def cmd_health(args):
         print()
         print("Complexity:")
         for c in result["complexity"]:
-            print(
-                f"  {c['project']}: {c['command_count']} commands (threshold: {c['threshold']})"
-            )
+            count = c["command_count"]
+            thresh = c["threshold"]
+            print(f"  {c['project']}: {count} commands (threshold: {thresh})")
         print()
         print(
-            "  Fix: Group related commands under subcommands, remove rarely-used options"
+            "  Fix: Group related commands under subcommands,"
+            " remove rarely-used options"
         )
 
     undoc = result["undocumented"]

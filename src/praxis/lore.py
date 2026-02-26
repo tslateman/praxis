@@ -112,8 +112,14 @@ def failures() -> list[dict]:
 
 
 def observations() -> list[dict]:
-    """Read inbox observations."""
-    return _read_jsonl(LORE_DIR / "inbox" / "data" / "observations.jsonl")
+    """Read inbox observations (latest version per ID)."""
+    all_entries = _read_jsonl(LORE_DIR / "inbox" / "data" / "observations.jsonl")
+    by_id: dict[str, dict] = {}
+    for entry in all_entries:
+        oid = entry.get("id", "")
+        if oid:
+            by_id[oid] = entry
+    return list(by_id.values())
 
 
 def raw_observations() -> list[dict]:

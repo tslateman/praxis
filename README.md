@@ -57,6 +57,18 @@ export PATH="$HOME/dev/praxis/bin:$PATH"
 | `praxis stale`       | Observations aging without action     |
 | `praxis correlate`   | Failures alongside nearby decisions   |
 
+### Watchdog (Tier 0 Monitoring)
+
+| Command                   | Description                                    |
+| ------------------------- | ---------------------------------------------- |
+| `praxis watchdog`         | Run mechanical failure ingest on a command     |
+| `praxis watchdog-report`  | Show recent watchdog failure summaries         |
+
+Example:
+```bash
+praxis watchdog --cmd "make test" --project praxis --window 10m --threshold 3
+```
+
 ### Delegation (writes go to Lore)
 
 | Praxis Shortcut         | Delegates To           |

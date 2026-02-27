@@ -9,7 +9,37 @@ import json
 import subprocess
 import sys
 
-from praxis import synthesis
+from praxis import synthesis, watchdog
+
+
+def parse_time(val: str) -> int:
+    """Parse time string like 10m, 5s to seconds."""
+    if val.endswith("m"):
+        return int(val[:-1]) * 60
+    if val.endswith("h"):
+        return int(val[:-1]) * 3600
+    if val.endswith("s"):
+        return int(val[:-1])
+    return int(val)
+
+
+def cmd_watchdog(args):
+    """Run watchdog to monitor command failures."""
+    window_sec = parse_time(args.window)
+    interval_sec = parse_time(args.interval)
+
+    watchdog.run_watchdog(
+        cmd=args.cmd,
+        project=args.project,
+        window_sec=window_sec,
+        threshold=args.threshold,
+        interval_sec=interval_sec,
+    )
+
+
+def cmd_watchdog_report(args):
+    """Summary of recent watchdog failures."""
+    watchdog.report_status()
 
 
 def cmd_status(args):
@@ -671,6 +701,21 @@ def main():
     p = sub.add_parser("decide", help="Record decision (delegates to lore)")
     p.add_argument("text", help="Decision text")
     p.set_defaults(func=cmd_decide)
+
+    # -- Watchdog commands --
+
+    p = sub.add_parser("watchdog", help="Run watchdog to monitor command failures")
+    p.add_argument("--cmd", required=True, help="Command to run")
+    p.add_argument("--project", required=True, help="Project name")
+    p.add_argument("--window", default="10m", help="Time window (e.g. 10m, 600s)")
+    p.add_argument(
+        "--threshold", type=int, default=3, help="Failures required to trigger"
+    )
+    p.add_argument("--interval", default="5m", help="Interval between runs")
+    p.set_defaults(func=cmd_watchdog)
+
+    p = sub.add_parser("watchdog-report", help="Summary of recent watchdog failures")
+    p.set_defaults(func=cmd_watchdog_report)
 
     args = parser.parse_args()
 

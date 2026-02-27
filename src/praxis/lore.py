@@ -177,3 +177,25 @@ def projects() -> list[str]:
     reg = registry()
     deps = reg.get("dependencies", {})
     return sorted(deps.keys())
+
+
+def fail(error_type: str, message: str, tool: str = "", step: str = "") -> None:
+    """Call the `lore fail` command via subprocess."""
+    import shutil
+    import subprocess
+    import sys
+
+    # Try using 'lore' from PATH, otherwise fallback to lore.sh
+    lore_cmd = shutil.which("lore")
+    if not lore_cmd:
+        lore_cmd = os.environ.get("LORE_CMD", str(LORE_DIR / "lore.sh"))
+
+    cmd = [lore_cmd, "fail", error_type, message]
+    if tool:
+        cmd.extend(["--tool", tool])
+    if step:
+        cmd.extend(["--step", step])
+    try:
+        subprocess.run(cmd, check=True, capture_output=True, text=True)
+    except subprocess.CalledProcessError as e:
+        print(f"Failed to record lore failure: {e.stderr}", file=sys.stderr)

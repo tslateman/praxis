@@ -23,7 +23,6 @@ class TestFailures:
         first = result[0]
         assert first["id"] == "fail-001"
         assert first["error_type"] == "Timeout"
-        assert first["mission"] == "lore-migration"
 
 
 # --- Observations ---
@@ -86,29 +85,6 @@ class TestGoals:
         active = lore.active_goals()
         ids = [g["id"] for g in active]
         assert "goal-003" not in ids
-
-
-# --- Missions ---
-
-
-class TestMissions:
-    def test_reads_all_missions(self, lore_dir):
-        result = lore.missions()
-        assert len(result) == 3
-
-    def test_missing_dir_returns_empty(self, empty_lore_dir):
-        assert lore.missions() == []
-
-    def test_pending_missions_excludes_completed(self, lore_dir):
-        pending = lore.pending_missions()
-        assert len(pending) == 2
-        ids = [m["id"] for m in pending]
-        assert "mission-003" not in ids
-
-    def test_pending_includes_in_progress(self, lore_dir):
-        pending = lore.pending_missions()
-        ids = [m["id"] for m in pending]
-        assert "mission-001" in ids
 
 
 # --- Registry ---

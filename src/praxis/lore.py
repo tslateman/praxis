@@ -8,7 +8,6 @@ Data locations (relative to LORE_DIR):
   inbox/data/observations.jsonl    Raw observations
   journal/data/decisions.jsonl     Decisions with rationale
   intent/data/goals/*.yaml         Goal definitions
-  intent/missions/*.yaml           Mission breakdowns
   registry/data/relationships.yaml Project relationships
 """
 
@@ -146,20 +145,6 @@ def goals() -> list[dict]:
 def active_goals() -> list[dict]:
     """Read goals with status='active'."""
     return [g for g in goals() if g.get("status") == "active"]
-
-
-def missions() -> list[dict]:
-    """Read all missions."""
-    return _read_yaml_dir(LORE_DIR / "intent" / "missions")
-
-
-def pending_missions() -> list[dict]:
-    """Read missions not yet completed."""
-    return [
-        m
-        for m in missions()
-        if m.get("status") not in ("completed", "failed", "cancelled")
-    ]
 
 
 # --- Registry ---

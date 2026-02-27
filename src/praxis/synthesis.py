@@ -21,7 +21,7 @@ import math
 from collections import Counter
 from datetime import datetime, timedelta, timezone
 
-from praxis import lore
+from praxis import lore, spectrace
 
 
 def _parse_ts(iso_str: str) -> datetime:
@@ -44,14 +44,15 @@ def status() -> dict:
     """Where am I? Active goals, current blockers, ecosystem pulse.
 
     Returns dict with:
-      active_goals: list of active goals with their missions
+      active_goals: list of active goals
       blockers: summary of failures, stale items, friction
       pulse: quick health indicator
     """
     active = lore.active_goals()
-    pending = lore.pending_missions()
     fails = lore.failures()
     stale_obs = _stale_observations(days=7)
+    tasks = spectrace.fetch_tasks()
+    task_counts = Counter(t.get("status", "unknown") for t in tasks)
 
     # Recent failures (last 7 days)
     week_ago = _now() - timedelta(days=7)
@@ -74,7 +75,7 @@ def status() -> dict:
 
     return {
         "active_goals": active,
-        "pending_missions": pending,
+        "tasks": dict(task_counts),
         "blockers": {
             "recent_failures": len(recent_failures),
             "stale_observations": len(stale_obs),
@@ -87,27 +88,42 @@ def next_work() -> list[dict]:
     """What should I work on? Prioritized work queue.
 
     Priority:
-    1. In-progress missions (finish what you started)
-    2. Pending missions from high-priority goals
-    3. Pending missions from other goals
+    1. In-progress SpecTrace tasks
+    2. Unclaimed SpecTrace tasks
+    3. Active goals sorted by priority
     """
-    missions_list = lore.missions()
-    goals_list = {g.get("id"): g for g in lore.goals()}
+    tasks = spectrace.fetch_tasks()
 
-    def priority_key(m: dict) -> tuple:
-        goal = goals_list.get(m.get("goal_id", ""), {})
+    in_progress = []
+    unclaimed = []
+    for t in tasks:
+        status = t.get("status")
+        item = {
+            "type": "task",
+            "id": t.get("external_id"),
+            "name": t.get("title"),
+            "status": status,
+        }
+        if status == "in_progress":
+            in_progress.append(item)
+        elif status == "unclaimed":
+            unclaimed.append(item)
+
+    goals_list = lore.active_goals()
+    for g in goals_list:
+        g["type"] = "goal"
+        if "id" not in g:
+            g["id"] = g.get("name", "")
+
+    def priority_key(g: dict) -> tuple:
         goal_priority = {"critical": 0, "high": 1, "medium": 2, "low": 3}.get(
-            goal.get("priority", "medium"), 2
+            g.get("priority", "medium"), 2
         )
-        status_priority = 0 if m.get("status") == "in_progress" else 1
-        return (status_priority, goal_priority, m.get("id", ""))
+        return (goal_priority, g.get("id", ""))
 
-    pending = [
-        m
-        for m in missions_list
-        if m.get("status") not in ("completed", "failed", "cancelled")
-    ]
-    return sorted(pending, key=priority_key)
+    sorted_goals = sorted(goals_list, key=priority_key)
+
+    return in_progress + unclaimed + sorted_goals
 
 
 def context(
@@ -594,12 +610,10 @@ def triggers(threshold: int = 3) -> list[dict]:
     results = []
     for et, entries in sorted(by_type.items()):
         if len(entries) >= threshold:
-            missions_set = sorted(set(e.get("mission", "") for e in entries))
             results.append(
                 {
                     "error_type": et,
                     "count": len(entries),
-                    "missions": missions_set,
                 }
             )
 
@@ -643,7 +657,7 @@ def friction() -> list[dict]:
     """Which project boundaries generate the most failures?
 
     Joins failures to registry relationships by extracting project names
-    from mission identifiers.
+    from failure context.
     """
     fails = lore.failures()
     reg = lore.registry()
@@ -656,11 +670,12 @@ def friction() -> list[dict]:
 
     boundary_failures: dict[str, list[dict]] = {}
     for f in fails:
-        mission = f.get("mission", "")
+        # Check if project name appears in failure message or project field
+        context_str = f"{f.get('project', '')} {f.get('error_message', '')}"
 
         boundary = None
         for proj in project_names:
-            if proj in mission:
+            if proj in context_str:
                 boundary = proj
                 break
 
@@ -670,13 +685,11 @@ def friction() -> list[dict]:
     results = []
     for boundary, flist in sorted(boundary_failures.items(), key=lambda x: -len(x[1])):
         error_counts = Counter(f.get("error_type", "unknown") for f in flist)
-        missions_set = sorted(set(f.get("mission", "") for f in flist))
         results.append(
             {
                 "boundary": boundary,
                 "failure_count": len(flist),
                 "error_types": dict(error_counts),
-                "missions": missions_set,
             }
         )
 
@@ -686,7 +699,7 @@ def friction() -> list[dict]:
 def blind_spots(threshold: int = 3) -> dict:
     """Failures that recur without a corresponding journal entry.
 
-    Groups failures by error_type + mission, finds those with >= threshold
+    Groups failures by error_type, finds those with >= threshold
     occurrences and no nearby journal entry (±24h).
     """
     fails = lore.failures()
@@ -703,7 +716,7 @@ def blind_spots(threshold: int = 3) -> dict:
 
     grouped: dict[str, list[dict]] = {}
     for f in fails:
-        key = f"{f.get('error_type', 'unknown')}::{f.get('mission', '')}"
+        key = f.get("error_type", "unknown")
         grouped.setdefault(key, []).append(f)
 
     orphaned = []
@@ -740,17 +753,16 @@ def blind_spots(threshold: int = 3) -> dict:
                 break
 
         if not has_nearby and first_ts and latest_ts:
-            error_type, mission = key.split("::", 1)
+            error_type = key
             orphaned.append(
                 {
                     "error_type": error_type,
-                    "mission": mission,
                     "count": len(flist),
                     "first_occurrence": first_ts.isoformat(),
                     "latest_occurrence": latest_ts.isoformat(),
                 }
             )
-            suggestions.append(f"Investigate {error_type} failures for {mission}")
+            suggestions.append(f"Investigate {error_type} failures")
 
     return {
         "orphaned_failures": orphaned,

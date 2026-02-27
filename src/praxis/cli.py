@@ -24,6 +24,13 @@ def cmd_status(args):
     print(f"Pulse: {pulse}")
     print()
 
+    tasks = result.get("tasks", {})
+    if tasks:
+        print("SpecTrace Tasks:")
+        for status, count in sorted(tasks.items()):
+            print(f"  {status}: {count}")
+        print()
+
     goals = result["active_goals"]
     if goals:
         print(f"Active Goals ({len(goals)}):")
@@ -31,16 +38,6 @@ def cmd_status(args):
             print(f"  {g.get('id', '?')}: {g.get('name', 'unnamed')}")
     else:
         print("No active goals.")
-
-    missions = result["pending_missions"]
-    if missions:
-        print()
-        print(f"Pending Missions ({len(missions)}):")
-        for m in missions[:5]:  # Top 5
-            status_str = m.get("status", "?")
-            print(f"  [{status_str}] {m.get('name', 'unnamed')}")
-        if len(missions) > 5:
-            print(f"  ... and {len(missions) - 5} more")
 
     blockers = result["blockers"]
     if blockers["recent_failures"] > 0 or blockers["stale_observations"] > 0:
@@ -68,7 +65,8 @@ def cmd_next(args):
     for i, m in enumerate(result[:10], 1):  # Top 10
         status_str = m.get("status", "?")
         marker = ">" if status_str == "in_progress" else " "
-        print(f"{marker} {i}. [{status_str}] {m.get('name', 'unnamed')}")
+        type_str = m.get("type", "goal").upper()
+        print(f"{marker} {i}. [{type_str}][{status_str}] {m.get('name', 'unnamed')}")
 
     if len(result) > 10:
         print(f"... and {len(result) - 10} more")
@@ -139,10 +137,7 @@ def cmd_health(args):
         print()
         print("Triggers:")
         for t in result["triggers"]:
-            missions_str = ", ".join(t["missions"]) if t["missions"] else "none"
-            print(
-                f"  {t['error_type']}: {t['count']} failures (missions: {missions_str})"
-            )
+            print(f"  {t['error_type']}: {t['count']} failures")
 
     if result["stale_observations"]:
         print()
@@ -157,7 +152,7 @@ def cmd_health(args):
         print()
         print("Blind Spots:")
         for b in result["blind_spots"]:
-            print(f"  {b['error_type']} / {b['mission']}: {b['count']} failures")
+            print(f"  {b['error_type']}: {b['count']} failures")
 
     if result["friction"]:
         print()
@@ -216,8 +211,7 @@ def cmd_triggers(args):
         return
 
     for t in results:
-        missions_str = ", ".join(t["missions"]) if t["missions"] else "none"
-        print(f"  {t['error_type']}: {t['count']} failures (missions: {missions_str})")
+        print(f"  {t['error_type']}: {t['count']} failures")
 
 
 def cmd_stale(args):
@@ -260,8 +254,6 @@ def cmd_friction(args):
             f"  {r['boundary']} boundary: {r['failure_count']} failures "
             f"({', '.join(error_strs)})"
         )
-        for m in r["missions"]:
-            print(f"    mission: {m}")
 
 
 def cmd_blind_spots(args):
@@ -281,7 +273,7 @@ def cmd_blind_spots(args):
     for o in orphaned:
         first = o["first_occurrence"][:10]
         latest = o["latest_occurrence"][:10]
-        print(f"  {o['error_type']} / {o['mission']}: {o['count']} failures")
+        print(f"  {o['error_type']}: {o['count']} failures")
         print(f"    First: {first}, Latest: {latest}")
     print(f"Total: {result['blind_spot_count']} blind spots")
 
@@ -547,8 +539,6 @@ def cmd_correlate(args):
 def cmd_fail(args):
     """Delegate to lore fail."""
     cmd = ["lore", "fail", args.error_type, args.message]
-    if args.mission:
-        cmd.extend(["--mission", args.mission])
     subprocess.run(cmd)
 
 
@@ -672,7 +662,6 @@ def main():
     p = sub.add_parser("fail", help="Log a failure (delegates to lore)")
     p.add_argument("error_type", help="Error category (Timeout, NonZeroExit, etc)")
     p.add_argument("message", help="What happened")
-    p.add_argument("--mission", help="Mission ID")
     p.set_defaults(func=cmd_fail)
 
     p = sub.add_parser("observe", help="Capture observation (delegates to lore)")

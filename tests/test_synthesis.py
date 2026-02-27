@@ -31,7 +31,6 @@ class TestStatus:
     def test_returns_expected_keys(self, lore_dir):
         result = synthesis.status()
         assert "active_goals" in result
-        assert "pending_missions" in result
         assert "blockers" in result
         assert "pulse" in result
 
@@ -44,7 +43,6 @@ class TestStatus:
         result = synthesis.status()
         assert result["pulse"] == "clear"
         assert result["active_goals"] == []
-        assert result["pending_missions"] == []
 
     def test_blockers_counts(self, lore_dir):
         result = synthesis.status()
@@ -62,7 +60,7 @@ class TestStatus:
                     "id": f"fail-extra-{i}",
                     "error_type": "Flood",
                     "error_message": "too many",
-                    "mission": "test",
+                    "project": "test",
                     "timestamp": _days_ago(1),
                 }
             )
@@ -71,26 +69,64 @@ class TestStatus:
         result = synthesis.status()
         assert result["pulse"] == "attention"
 
+    def test_status_with_spectrace_tasks(self, lore_dir, monkeypatch):
+        monkeypatch.setattr(
+            "praxis.spectrace.fetch_tasks",
+            lambda: [
+                {"external_id": "T-1", "title": "Task 1", "status": "unclaimed"},
+                {"external_id": "T-2", "title": "Task 2", "status": "in_progress"},
+                {"external_id": "T-3", "title": "Task 3", "status": "in_progress"},
+            ],
+        )
+        result = synthesis.status()
+        assert result["tasks"]["unclaimed"] == 1
+        assert result["tasks"]["in_progress"] == 2
+
 
 # --- next_work() ---
 
 
 class TestNextWork:
-    def test_returns_sorted_missions(self, lore_dir):
+    def test_returns_sorted_goals(self, lore_dir):
         result = synthesis.next_work()
-        assert len(result) == 2  # mission-001 (in_progress) + mission-002 (pending)
+        assert len(result) == 2  # goal-001 (high), goal-002 (medium)
 
-    def test_in_progress_first(self, lore_dir):
+    def test_priority_first(self, lore_dir):
         result = synthesis.next_work()
-        assert result[0]["status"] == "in_progress"
+        assert result[0]["id"] == "goal-001"
 
-    def test_empty_when_no_missions(self, empty_lore_dir):
+    def test_empty_when_no_goals(self, empty_lore_dir):
         assert synthesis.next_work() == []
 
-    def test_excludes_completed(self, lore_dir):
+    def test_excludes_archived(self, lore_dir):
         result = synthesis.next_work()
-        ids = [m["id"] for m in result]
-        assert "mission-003" not in ids
+        ids = [g["id"] for g in result]
+        assert "goal-003" not in ids
+
+    def test_spectrace_tasks_prioritized(self, lore_dir, monkeypatch):
+        monkeypatch.setattr(
+            "praxis.spectrace.fetch_tasks",
+            lambda: [
+                {"external_id": "T-1", "title": "Task 1", "status": "unclaimed"},
+                {"external_id": "T-2", "title": "Task 2", "status": "in_progress"},
+                {"external_id": "T-3", "title": "Task 3", "status": "completed"},
+            ],
+        )
+        result = synthesis.next_work()
+
+        # in_progress task comes first
+        assert result[0]["id"] == "T-2"
+        assert result[0]["type"] == "task"
+        assert result[0]["status"] == "in_progress"
+
+        # unclaimed task comes second
+        assert result[1]["id"] == "T-1"
+        assert result[1]["type"] == "task"
+        assert result[1]["status"] == "unclaimed"
+
+        # goal comes third
+        assert result[2]["id"] == "goal-001"
+        assert result[2]["type"] == "goal"
 
 
 # --- blockers_view() ---

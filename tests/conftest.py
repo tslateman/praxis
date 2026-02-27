@@ -49,6 +49,9 @@ def lore_dir(tmp_path, monkeypatch):
 
     Returns the tmp_path root so tests can add/modify files as needed.
     """
+    # Mock spectrace by default
+    monkeypatch.setattr("praxis.spectrace.fetch_tasks", lambda: [])
+
     # -- Failures --
     _write_jsonl(
         tmp_path / "failures" / "data" / "failures.jsonl",
@@ -57,35 +60,35 @@ def lore_dir(tmp_path, monkeypatch):
                 "id": "fail-001",
                 "error_type": "Timeout",
                 "error_message": "Connection timed out to API",
-                "mission": "lore-migration",
+                "project": "lore",
                 "timestamp": _days_ago(2),
             },
             {
                 "id": "fail-002",
                 "error_type": "Timeout",
                 "error_message": "Build step timed out",
-                "mission": "lore-migration",
+                "project": "lore",
                 "timestamp": _days_ago(3),
             },
             {
                 "id": "fail-003",
                 "error_type": "Timeout",
                 "error_message": "Another timeout",
-                "mission": "lore-migration",
+                "project": "lore",
                 "timestamp": _days_ago(1),
             },
             {
                 "id": "fail-004",
                 "error_type": "NonZeroExit",
                 "error_message": "pytest returned 1",
-                "mission": "bach-workers",
+                "project": "bach",
                 "timestamp": _days_ago(1),
             },
             {
                 "id": "fail-005",
                 "error_type": "ParseError",
                 "error_message": "Invalid YAML",
-                "mission": "lore-migration",
+                "project": "lore",
                 "timestamp": _days_ago(30),
             },
         ],
@@ -217,36 +220,6 @@ def lore_dir(tmp_path, monkeypatch):
         },
     )
 
-    # -- Missions --
-    missions_dir = tmp_path / "intent" / "missions"
-    _write_yaml(
-        missions_dir / "mission-001.yaml",
-        {
-            "id": "mission-001",
-            "name": "Migrate JSONL readers",
-            "status": "in_progress",
-            "goal_id": "goal-001",
-        },
-    )
-    _write_yaml(
-        missions_dir / "mission-002.yaml",
-        {
-            "id": "mission-002",
-            "name": "Write Praxis tests",
-            "status": "pending",
-            "goal_id": "goal-002",
-        },
-    )
-    _write_yaml(
-        missions_dir / "mission-003.yaml",
-        {
-            "id": "mission-003",
-            "name": "Old completed mission",
-            "status": "completed",
-            "goal_id": "goal-001",
-        },
-    )
-
     # -- Registry --
     _write_yaml(
         tmp_path / "registry" / "data" / "relationships.yaml",
@@ -335,6 +308,7 @@ def empty_lore_dir(tmp_path, monkeypatch):
     import praxis.lore as lore_mod
 
     monkeypatch.setattr(lore_mod, "LORE_DIR", tmp_path)
+    monkeypatch.setattr("praxis.spectrace.fetch_tasks", lambda: [])
     lore_mod.cache_clear()
 
     yield tmp_path

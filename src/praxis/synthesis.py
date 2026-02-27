@@ -873,7 +873,7 @@ def refinement(min_cluster: int = 3, stale_days: int = 14) -> dict:
                 "decisions": sorted(comp),
                 "topic": topic,
                 "suggestion": (
-                    f"Consolidate {len(comp)} related decisions" " into a pattern"
+                    f"Consolidate {len(comp)} related decisions into a pattern"
                 ),
             }
         )
@@ -913,7 +913,7 @@ def refinement(min_cluster: int = 3, stale_days: int = 14) -> dict:
     for dc in decision_chains:
         suggestions.append(dc["suggestion"])
     for a in aging[:3]:
-        suggestions.append(f"Resolve or close {a['id']}: \"{a['decision']}\"")
+        suggestions.append(f'Resolve or close {a["id"]}: "{a["decision"]}"')
 
     return {
         "tag_clusters": tag_clusters,

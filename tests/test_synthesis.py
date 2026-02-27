@@ -517,7 +517,7 @@ class TestParseClaude:
 
     def test_ignores_other_projects(self):
         content = (
-            "| `lore status` | Lore status |\n" "| `praxis status` | Praxis status |\n"
+            "| `lore status` | Lore status |\n| `praxis status` | Praxis status |\n"
         )
         cmds = synthesis._parse_claude_md_commands(content, "praxis")
         assert "status" in cmds

@@ -150,7 +150,7 @@ def cmd_health(args):
         for o in result["stale_observations"][:5]:
             print(
                 f"  {o.get('id', '?')}  {o.get('timestamp', '')[:10]}  "
-                f"\"{o.get('content', '')[:40]}\""
+                f'"{o.get("content", "")[:40]}"'
             )
 
     if result["blind_spots"]:
@@ -192,10 +192,10 @@ def cmd_health(args):
         print()
         print("Undocumented:")
         for d in undoc["decisions"][:5]:
-            print(f"  {d['id']}: \"{d['decision']}\" (no rationale)")
+            print(f'  {d["id"]}: "{d["decision"]}" (no rationale)')
         for p in undoc["patterns"][:5]:
             missing = ", ".join(p["missing"])
-            print(f"  {p['id']}: \"{p['name']}\" (missing: {missing})")
+            print(f'  {p["id"]}: "{p["name"]}" (missing: {missing})')
         print()
         if undoc["decisions"]:
             print('  Fix: lore remember "<decision>" --rationale "why"')
@@ -217,9 +217,7 @@ def cmd_triggers(args):
 
     for t in results:
         missions_str = ", ".join(t["missions"]) if t["missions"] else "none"
-        print(
-            f"  {t['error_type']}: {t['count']} failures " f"(missions: {missions_str})"
-        )
+        print(f"  {t['error_type']}: {t['count']} failures (missions: {missions_str})")
 
 
 def cmd_stale(args):
@@ -239,7 +237,7 @@ def cmd_stale(args):
     for o in obs:
         print(
             f"  {o.get('id', '?')}  {o.get('timestamp', '')[:10]}  "
-            f"\"{o.get('content', '')}\""
+            f'"{o.get("content", "")}"'
         )
     print(f"Total: {result['stale_count']} stale, {result['total_raw']} raw")
 
@@ -330,7 +328,7 @@ def cmd_refinement(args):
         for a in result["aging"]:
             print(
                 f"  {a['id']}  {a['timestamp']}  "
-                f"\"{a['decision']}\" ({a['age_days']} days, {a['outcome']})"
+                f'"{a["decision"]}" ({a["age_days"]} days, {a["outcome"]})'
             )
 
     print()
@@ -509,10 +507,10 @@ def cmd_undocumented(args):
 
     print("Undocumented:")
     for d in result["decisions"]:
-        print(f"  {d['id']}: \"{d['decision']}\" (no rationale)")
+        print(f'  {d["id"]}: "{d["decision"]}" (no rationale)')
     for p in result["patterns"]:
         missing = ", ".join(p["missing"])
-        print(f"  {p['id']}: \"{p['name']}\" (missing: {missing})")
+        print(f'  {p["id"]}: "{p["name"]}" (missing: {missing})')
     print()
     if result["decisions"]:
         print('Fix: lore remember "<decision>" --rationale "why"')
@@ -540,7 +538,7 @@ def cmd_correlate(args):
             f"{f.get('error_message', '')}"
         )
         for d in r["nearby_decisions"]:
-            print(f"    nearby: {d.get('id', '?')} \"{d.get('decision', '')}\"")
+            print(f'    nearby: {d.get("id", "?")} "{d.get("decision", "")}"')
 
 
 # --- Delegation commands (pass through to Lore) ---

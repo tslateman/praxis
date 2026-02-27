@@ -4,17 +4,15 @@ Operational synthesis layer over Lore. Reads from Lore's memory, synthesizes act
 
 ## Ecosystem
 
-> **You are here: Praxis** -- Supporting (Synthesis)
+> **You are here: Praxis** -- Synthesis layer over Lore
 
-| Project | Pillar   | Role                        |
-| ------- | -------- | --------------------------- |
-| Lore    | Data     | Memory, registry, intent    |
-| Mirror  | Data     | Judgment capture & patterns |
-| Bach    | Action   | Stateless workers           |
-| Council | Advisory | Cross-project decisions     |
-
-Neo and Ralph archived (`dec-fff7bb6e`). Claude Code native teams replace
-custom orchestration.
+| Project     | Role                        |
+| ----------- | --------------------------- |
+| **Lore**    | Memory, registry, intent    |
+| **Council** | Cross-project decisions     |
+| **Praxis**  | Synthesis layer over Lore   |
+| **Geordi**  | Unified API + GUIs          |
+| **Forge**   | Spec, prototype, synthesize |
 
 Praxis reads from Lore. Full map: ~/dev/council/mainstay/ecosystem.md
 
@@ -40,6 +38,7 @@ from zero to productive.
 | `praxis stale`        | Observations aging without action               |
 | `praxis overlap`      | Command name conflicts across projects          |
 | `praxis complexity`   | Projects exceeding complexity thresholds        |
+| `praxis correlate`    | Failures alongside nearby decisions             |
 | `praxis undocumented` | Decisions and patterns lacking rationale        |
 
 ## Architecture
@@ -58,6 +57,15 @@ src/praxis/
   synthesis.py          Combine sources into actionable views
 ```
 
-## Pending Plans
+## Development
 
-Check `plans/` for session pickup files before starting new work.
+```bash
+make check   # lint + format + test (matches CI)
+make test    # pytest only
+make lint    # ruff check
+make format  # ruff format --check
+```
+
+## Completed Plans
+
+- `plans/add-ci.md` -- CI workflow, ruff config, Makefile (commit `c05a3a9`)

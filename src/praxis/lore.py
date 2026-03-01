@@ -4,8 +4,9 @@ Praxis reads directly from Lore's JSONL/YAML storage. No subprocess
 calls to `lore` CLI — direct file access keeps it fast.
 
 Data locations (relative to LORE_DIR):
+  evidence/data/evidence.jsonl     Verified evidence with provenance
   failures/data/failures.jsonl     Failure reports
-  inbox/data/observations.jsonl    Raw observations
+  inbox/data/signals.jsonl         Raw signals (observations)
   journal/data/decisions.jsonl     Decisions with rationale
   intent/data/goals/*.yaml         Goal definitions
   registry/data/relationships.yaml Project relationships
@@ -107,23 +108,46 @@ def failures() -> list[dict]:
     return _read_jsonl(LORE_DIR / "failures" / "data" / "failures.jsonl")
 
 
+# --- Evidence ---
+
+
+def evidence() -> list[dict]:
+    """Read all evidence entries."""
+    return _read_jsonl(LORE_DIR / "evidence" / "data" / "evidence.jsonl")
+
+
+def preliminary_evidence() -> list[dict]:
+    """Read evidence with confidence='preliminary'."""
+    return [e for e in evidence() if e.get("confidence") == "preliminary"]
+
+
+def confirmed_evidence() -> list[dict]:
+    """Read evidence with confidence='confirmed'."""
+    return [e for e in evidence() if e.get("confidence") == "confirmed"]
+
+
 # --- Inbox ---
 
 
-def observations() -> list[dict]:
-    """Read inbox observations (latest version per ID)."""
-    all_entries = _read_jsonl(LORE_DIR / "inbox" / "data" / "observations.jsonl")
+def signals() -> list[dict]:
+    """Read inbox signals (latest version per ID)."""
+    all_entries = _read_jsonl(LORE_DIR / "inbox" / "data" / "signals.jsonl")
     by_id: dict[str, dict] = {}
     for entry in all_entries:
-        oid = entry.get("id", "")
-        if oid:
-            by_id[oid] = entry
+        sid = entry.get("id", "")
+        if sid:
+            by_id[sid] = entry
     return list(by_id.values())
 
 
-def raw_observations() -> list[dict]:
-    """Read observations with status='raw'."""
-    return [o for o in observations() if o.get("status") == "raw"]
+def raw_signals() -> list[dict]:
+    """Read signals with status='raw'."""
+    return [s for s in signals() if s.get("status") == "raw"]
+
+
+# Backward-compatible aliases
+observations = signals
+raw_observations = raw_signals
 
 
 # --- Journal ---

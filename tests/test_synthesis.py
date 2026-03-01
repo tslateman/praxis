@@ -47,8 +47,8 @@ class TestStatus:
     def test_blockers_counts(self, lore_dir):
         result = synthesis.status()
         assert result["blockers"]["recent_failures"] >= 1
-        # obs-001 and obs-004 are raw and older than 7 days
-        assert result["blockers"]["stale_observations"] >= 1
+        # sig-001 and sig-004 are raw and older than 7 days
+        assert result["blockers"]["stale_signals"] >= 1
 
     def test_pulse_attention_many_failures(self, lore_dir):
         """6+ recent failures trigger 'attention' pulse."""
@@ -144,6 +144,11 @@ class TestBlockersView:
         assert result["failures"]["count"] >= 1
         assert "Timeout" in result["failures"]["by_type"]
 
+    def test_stale_signals_in_blockers(self, lore_dir):
+        result = synthesis.blockers_view()
+        assert "signals" in result["stale"]
+        assert result["stale"]["count"] >= 1
+
     def test_empty_data(self, empty_lore_dir):
         result = synthesis.blockers_view()
         assert result["failures"]["count"] == 0
@@ -176,23 +181,23 @@ class TestTriggers:
 
 
 class TestStale:
-    def test_finds_stale_observations(self, lore_dir):
+    def test_finds_stale_signals(self, lore_dir):
         result = synthesis.stale(days=7)
         assert result["stale_count"] >= 1
-        # obs-001 (10d) and obs-004 (20d) are raw and older than 7 days
-        stale_ids = [o["id"] for o in result["stale_observations"]]
-        assert "obs-001" in stale_ids
-        assert "obs-004" in stale_ids
+        # sig-001 (10d) and sig-004 (20d) are raw and older than 7 days
+        stale_ids = [s["id"] for s in result["stale_signals"]]
+        assert "sig-001" in stale_ids
+        assert "sig-004" in stale_ids
 
     def test_excludes_recent_raw(self, lore_dir):
         result = synthesis.stale(days=7)
-        stale_ids = [o["id"] for o in result["stale_observations"]]
-        # obs-002 is raw but only 2 days old
-        assert "obs-002" not in stale_ids
+        stale_ids = [s["id"] for s in result["stale_signals"]]
+        # sig-002 is raw but only 2 days old
+        assert "sig-002" not in stale_ids
 
     def test_total_raw_count(self, lore_dir):
         result = synthesis.stale(days=7)
-        assert result["total_raw"] == 3  # obs-001, obs-002, obs-004
+        assert result["total_raw"] == 3  # sig-001, sig-002, sig-004
 
     def test_empty_data(self, empty_lore_dir):
         result = synthesis.stale()
@@ -320,6 +325,7 @@ class TestCorrelate:
 class TestContext:
     def test_returns_expected_keys(self, lore_dir):
         result = synthesis.context()
+        assert "evidence" in result
         assert "patterns" in result
         assert "anti_patterns" in result
         assert "decisions" in result
@@ -330,6 +336,7 @@ class TestContext:
 
     def test_unfiltered_returns_all_sections(self, lore_dir):
         result = synthesis.context(budget=50000)
+        assert len(result["evidence"]) > 0
         assert len(result["patterns"]) > 0
         assert len(result["goals"]) > 0
 
@@ -337,14 +344,9 @@ class TestContext:
         all_results = synthesis.context(budget=50000)
         filtered = synthesis.context(tags=["caching"], budget=50000)
         # Filtered should have equal or fewer items
-        all_total = sum(
-            len(all_results[k])
-            for k in ("patterns", "anti_patterns", "decisions", "goals")
-        )
-        filt_total = sum(
-            len(filtered[k])
-            for k in ("patterns", "anti_patterns", "decisions", "goals")
-        )
+        sections = ("evidence", "patterns", "anti_patterns", "decisions", "goals")
+        all_total = sum(len(all_results[k]) for k in sections)
+        filt_total = sum(len(filtered[k]) for k in sections)
         assert filt_total <= all_total
 
     def test_project_filter(self, lore_dir):
@@ -354,9 +356,8 @@ class TestContext:
     def test_budget_truncation(self, lore_dir):
         result = synthesis.context(budget=1)
         # With 1 token budget, nothing fits
-        total = sum(
-            len(result[k]) for k in ("patterns", "anti_patterns", "decisions", "goals")
-        )
+        sections = ("evidence", "patterns", "anti_patterns", "decisions", "goals")
+        total = sum(len(result[k]) for k in sections)
         assert total == 0
         assert result["truncated"] is True
 
@@ -367,15 +368,42 @@ class TestContext:
 
     def test_scores_present(self, lore_dir):
         result = synthesis.context(budget=50000)
-        for section in ("patterns", "anti_patterns", "decisions", "goals"):
+        for section in ("evidence", "patterns", "anti_patterns", "decisions", "goals"):
             for item in result[section]:
                 assert "_score" in item
 
     def test_empty_data(self, empty_lore_dir):
         result = synthesis.context()
+        assert result["evidence"] == []
         assert result["patterns"] == []
         assert result["decisions"] == []
         assert result["token_estimate"] == 0
+
+    def test_evidence_in_context(self, lore_dir):
+        """Evidence appears in context output with scoring."""
+        result = synthesis.context(budget=50000)
+        assert len(result["evidence"]) > 0
+        evi = result["evidence"][0]
+        assert "id" in evi
+        assert "content" in evi
+        assert "confidence" in evi
+        assert "_score" in evi
+
+    def test_evidence_quality_scoring(self, lore_dir):
+        """Confirmed evidence scores higher than contested."""
+        result = synthesis.context(budget=50000)
+        scores_by_conf = {}
+        for e in result["evidence"]:
+            conf = e["confidence"]
+            scores_by_conf.setdefault(conf, []).append(e["_score"])
+        if "confirmed" in scores_by_conf and "contested" in scores_by_conf:
+            avg_confirmed = sum(scores_by_conf["confirmed"]) / len(
+                scores_by_conf["confirmed"]
+            )
+            avg_contested = sum(scores_by_conf["contested"]) / len(
+                scores_by_conf["contested"]
+            )
+            assert avg_confirmed > avg_contested
 
     def test_contention_detection(self, lore_dir):
         """dec-001 (accepted, storage tag) and dec-005 (revised, storage tag)
@@ -509,7 +537,7 @@ class TestHealth:
         assert "summary" in result
         assert "status" in result
         assert "triggers" in result
-        assert "stale_observations" in result
+        assert "stale_signals" in result
         assert "blind_spots" in result
         assert "friction" in result
 

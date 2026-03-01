@@ -25,26 +25,69 @@ class TestFailures:
         assert first["error_type"] == "Timeout"
 
 
-# --- Observations ---
+# --- Evidence ---
 
 
-class TestObservations:
-    def test_reads_all_observations(self, lore_dir):
-        result = lore.observations()
+class TestEvidence:
+    def test_reads_all_evidence(self, lore_dir):
+        result = lore.evidence()
+        assert len(result) == 4
+        assert all("confidence" in e for e in result)
+
+    def test_missing_file_returns_empty(self, empty_lore_dir):
+        assert lore.evidence() == []
+
+    def test_preliminary_evidence(self, lore_dir):
+        result = lore.preliminary_evidence()
+        assert len(result) == 1
+        assert result[0]["id"] == "evi-002"
+
+    def test_confirmed_evidence(self, lore_dir):
+        result = lore.confirmed_evidence()
+        assert len(result) == 2
+        ids = [e["id"] for e in result]
+        assert "evi-001" in ids
+        assert "evi-003" in ids
+
+    def test_evidence_fields(self, lore_dir):
+        result = lore.evidence()
+        first = next(e for e in result if e["id"] == "evi-001")
+        assert first["source"] == "praxis"
+        assert first["confidence"] == "confirmed"
+        assert first["provenance"] == "Benchmarked in test suite"
+
+
+# --- Signals ---
+
+
+class TestSignals:
+    def test_reads_all_signals(self, lore_dir):
+        result = lore.signals()
         assert len(result) == 4
 
     def test_missing_file_returns_empty(self, empty_lore_dir):
-        assert lore.observations() == []
+        assert lore.signals() == []
 
-    def test_raw_observations_filters_by_status(self, lore_dir):
-        raw = lore.raw_observations()
+    def test_raw_signals_filters_by_status(self, lore_dir):
+        raw = lore.raw_signals()
         assert len(raw) == 3
-        assert all(o["status"] == "raw" for o in raw)
+        assert all(s["status"] == "raw" for s in raw)
 
-    def test_raw_observations_excludes_processed(self, lore_dir):
-        raw = lore.raw_observations()
-        ids = [o["id"] for o in raw]
-        assert "obs-003" not in ids  # processed
+    def test_raw_signals_excludes_processed(self, lore_dir):
+        raw = lore.raw_signals()
+        ids = [s["id"] for s in raw]
+        assert "sig-003" not in ids  # processed
+
+
+# --- Backward Compatibility Aliases ---
+
+
+class TestBackwardCompat:
+    def test_observations_alias(self, lore_dir):
+        assert lore.observations() == lore.signals()
+
+    def test_raw_observations_alias(self, lore_dir):
+        assert lore.raw_observations() == lore.raw_signals()
 
 
 # --- Decisions ---

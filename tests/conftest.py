@@ -94,31 +94,78 @@ def lore_dir(tmp_path, monkeypatch):
         ],
     )
 
-    # -- Observations --
+    # -- Evidence --
     _write_jsonl(
-        tmp_path / "inbox" / "data" / "observations.jsonl",
+        tmp_path / "evidence" / "data" / "evidence.jsonl",
         [
             {
-                "id": "obs-001",
+                "id": "evi-001",
+                "timestamp": _days_ago(2),
+                "source": "praxis",
+                "content": "TTL cache reduces file I/O by 80%",
+                "confidence": "confirmed",
+                "tags": ["performance", "caching"],
+                "cited_by": ["dec-001"],
+                "provenance": "Benchmarked in test suite",
+            },
+            {
+                "id": "evi-002",
+                "timestamp": _days_ago(5),
+                "source": "lore",
+                "content": "JSONL append is 3x faster than YAML rewrite",
+                "confidence": "preliminary",
+                "tags": ["storage", "architecture"],
+                "cited_by": [],
+                "provenance": "Observed during migration",
+            },
+            {
+                "id": "evi-003",
+                "timestamp": _days_ago(1),
+                "source": "council",
+                "content": "Subprocess calls add 200ms overhead per read",
+                "confidence": "confirmed",
+                "tags": ["performance"],
+                "cited_by": ["dec-002"],
+                "provenance": "Profiler trace",
+            },
+            {
+                "id": "evi-004",
+                "timestamp": _days_ago(30),
+                "source": "lore",
+                "content": "Old contested finding about YAML speed",
+                "confidence": "contested",
+                "tags": ["storage"],
+                "cited_by": [],
+                "provenance": "Informal test",
+            },
+        ],
+    )
+
+    # -- Signals --
+    _write_jsonl(
+        tmp_path / "inbox" / "data" / "signals.jsonl",
+        [
+            {
+                "id": "sig-001",
                 "content": "Lore CLI response times increasing",
                 "status": "raw",
                 "timestamp": _days_ago(10),
             },
             {
-                "id": "obs-002",
+                "id": "sig-002",
                 "content": "Bach workers idle on weekends",
                 "status": "raw",
                 "timestamp": _days_ago(2),
             },
             {
-                "id": "obs-003",
+                "id": "sig-003",
                 "content": "Registry schema settled",
                 "status": "processed",
                 "timestamp": _days_ago(15),
             },
             {
-                "id": "obs-004",
-                "content": "Old stale observation from weeks ago",
+                "id": "sig-004",
+                "content": "Old stale signal from weeks ago",
                 "status": "raw",
                 "timestamp": _days_ago(20),
             },

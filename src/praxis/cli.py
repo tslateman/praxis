@@ -70,13 +70,13 @@ def cmd_status(args):
         print("No active goals.")
 
     blockers = result["blockers"]
-    if blockers["recent_failures"] > 0 or blockers["stale_observations"] > 0:
+    if blockers["recent_failures"] > 0 or blockers["stale_signals"] > 0:
         print()
         print("Blockers:")
         if blockers["recent_failures"] > 0:
             print(f"  {blockers['recent_failures']} failures (last 7 days)")
-        if blockers["stale_observations"] > 0:
-            print(f"  {blockers['stale_observations']} stale observations")
+        if blockers["stale_signals"] > 0:
+            print(f"  {blockers['stale_signals']} stale signals")
 
 
 def cmd_next(args):
@@ -121,8 +121,8 @@ def cmd_blockers(args):
     stale_data = result["stale"]
     if stale_data["count"] > 0:
         print()
-        print(f"Stale Observations ({stale_data['count']}):")
-        for o in stale_data["observations"][:5]:
+        print(f"Stale Signals ({stale_data['count']}):")
+        for o in stale_data["signals"][:5]:
             print(f"  {o.get('id', '?')}: {o.get('content', '')[:50]}")
 
     friction_data = result["friction"]
@@ -152,7 +152,7 @@ def cmd_health(args):
         f"{summary['recent_failures']} recent (7 days)"
     )
     print(f"  Triggers: {summary['trigger_count']} error types hitting threshold")
-    print(f"  Stale: {summary['stale_count']} observations aging without action")
+    print(f"  Stale: {summary['stale_count']} signals aging without action")
     print(f"  Blind spots: {summary['blind_spot_count']}")
     print(f"  Friction: {summary['friction_boundaries']} project boundaries")
     print(f"  Overlap: {summary['overlap_count']} command name conflicts")
@@ -169,10 +169,10 @@ def cmd_health(args):
         for t in result["triggers"]:
             print(f"  {t['error_type']}: {t['count']} failures")
 
-    if result["stale_observations"]:
+    if result["stale_signals"]:
         print()
-        print("Stale Observations:")
-        for o in result["stale_observations"][:5]:
+        print("Stale Signals:")
+        for o in result["stale_signals"][:5]:
             print(
                 f"  {o.get('id', '?')}  {o.get('timestamp', '')[:10]}  "
                 f'"{o.get("content", "")[:40]}"'
@@ -252,13 +252,13 @@ def cmd_stale(args):
         print(json.dumps(result, indent=2))
         return
 
-    obs = result["stale_observations"]
-    if not obs:
-        print(f"No stale observations (threshold: {args.days} days).")
+    sigs = result["stale_signals"]
+    if not sigs:
+        print(f"No stale signals (threshold: {args.days} days).")
         return
 
-    print(f"Stale observations (> {args.days} days):")
-    for o in obs:
+    print(f"Stale signals (> {args.days} days):")
+    for o in sigs:
         print(
             f"  {o.get('id', '?')}  {o.get('timestamp', '')[:10]}  "
             f'"{o.get("content", "")}"'
@@ -392,6 +392,17 @@ def cmd_context(args):
             return f"  [{item.get('_score', 0)}]"
         return ""
 
+    if result["evidence"]:
+        print()
+        print("Evidence:")
+        for e in result["evidence"]:
+            conf = e.get("confidence", "preliminary")
+            print(f"  {e['id']}  [{conf}]  {e['content']}{_score_suffix(e)}")
+            if e.get("source"):
+                print(f"    Source: {e['source']}")
+            if e.get("provenance"):
+                print(f"    Provenance: {e['provenance']}")
+
     if result["patterns"]:
         print()
         print("Patterns:")
@@ -456,6 +467,7 @@ def cmd_context(args):
 
     if not any(
         [
+            result["evidence"],
             result["patterns"],
             result["anti_patterns"],
             result["decisions"],
@@ -671,7 +683,7 @@ def main():
     p.add_argument("--json", action="store_true", help="Output raw JSON")
     p.set_defaults(func=cmd_next)
 
-    p = sub.add_parser("blockers", help="Failures, stale observations, friction")
+    p = sub.add_parser("blockers", help="Failures, stale signals, friction")
     p.add_argument("--json", action="store_true", help="Output raw JSON")
     p.set_defaults(func=cmd_blockers)
 
@@ -701,7 +713,7 @@ def main():
     p.add_argument("--json", action="store_true", help="Output raw JSON")
     p.set_defaults(func=cmd_triggers)
 
-    p = sub.add_parser("stale", help="Observations aging without action")
+    p = sub.add_parser("stale", help="Signals aging without action")
     p.add_argument("--days", type=int, default=7, help="Age threshold (default: 7)")
     p.add_argument("--json", action="store_true", help="Output raw JSON")
     p.set_defaults(func=cmd_stale)

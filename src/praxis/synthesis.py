@@ -50,7 +50,7 @@ def status() -> dict:
     """
     active = lore.active_goals()
     fails = lore.failures()
-    stale_obs = _stale_observations(days=7)
+    stale_obs = _stale_signals(days=7)
     tasks = spectrace.fetch_tasks()
     task_counts = Counter(t.get("status", "unknown") for t in tasks)
 
@@ -96,7 +96,7 @@ def status() -> dict:
         },
         "blockers": {
             "recent_failures": len(recent_failures),
-            "stale_observations": len(stale_obs),
+            "stale_signals": len(stale_obs),
         },
         "pulse": pulse,
     }
@@ -245,7 +245,16 @@ def context(
     _priority_map = {"critical": 1.0, "high": 0.8, "medium": 0.5, "low": 0.2}
     _goal_status_map = {"active": 1.0, "paused": 0.3, "archived": 0.0}
 
+    _confidence_map = {
+        "confirmed": 0.9,
+        "preliminary": 0.5,
+        "contested": 0.3,
+        "superseded": 0.1,
+    }
+
     def _quality_score(item: dict, data_type: str) -> float:
+        if data_type == "evidence":
+            return _confidence_map.get(item.get("confidence", "preliminary"), 0.5)
         if data_type == "patterns":
             conf = float(item.get("confidence", 0))
             validations = float(item.get("validations", 0))
@@ -421,6 +430,7 @@ def context(
         return contentions
 
     # Gather and rank each section
+    all_evidence = _filter_and_rank(lore.evidence(), "evidence")
     all_patterns = _filter_and_rank(lore.patterns(), "patterns")
     all_anti = _filter_and_rank(lore.anti_patterns(), "anti_patterns")
     all_decisions = _filter_and_rank(lore.decisions(), "decisions")
@@ -448,6 +458,17 @@ def context(
             used += cost
             result.append(entry)
         return result
+
+    out_evidence = _add_items(
+        all_evidence,
+        lambda e: {
+            "id": e.get("id", ""),
+            "content": e.get("content", ""),
+            "source": e.get("source", ""),
+            "confidence": e.get("confidence", "preliminary"),
+            "provenance": e.get("provenance", ""),
+        },
+    )
 
     out_patterns = _add_items(
         all_patterns,
@@ -493,6 +514,7 @@ def context(
     )
 
     return {
+        "evidence": out_evidence,
         "patterns": out_patterns,
         "anti_patterns": out_anti,
         "decisions": out_decisions,
@@ -537,8 +559,8 @@ def blockers_view() -> dict:
             "count": len(recent_failures),
         },
         "stale": {
-            "observations": _stale_observations(days=7),
-            "count": len(_stale_observations(days=7)),
+            "signals": _stale_signals(days=7),
+            "count": len(_stale_signals(days=7)),
         },
         "friction": friction(),
     }
@@ -634,7 +656,7 @@ def health() -> dict:
             "failures": len(fleet_failures),
         },
         "triggers": trigger_results,
-        "stale_observations": stale_results["stale_observations"],
+        "stale_signals": stale_results["stale_signals"],
         "blind_spots": blind_spot_results["orphaned_failures"],
         "friction": friction_results,
         "refinement": refinement_results,
@@ -671,9 +693,9 @@ def triggers(threshold: int = 3) -> list[dict]:
     return results
 
 
-def _stale_observations(days: int = 7) -> list[dict]:
-    """Helper: observations older than threshold with status='raw'."""
-    entries = lore.raw_observations()
+def _stale_signals(days: int = 7) -> list[dict]:
+    """Helper: signals older than threshold with status='raw'."""
+    entries = lore.raw_signals()
     threshold = timedelta(days=days)
     now = _now()
 
@@ -690,16 +712,16 @@ def _stale_observations(days: int = 7) -> list[dict]:
 
 
 def stale(days: int = 7) -> dict:
-    """Observations aging without action.
+    """Signals aging without action.
 
-    Returns dict with stale_observations, stale_count, total_raw.
+    Returns dict with stale_signals, stale_count, total_raw.
     """
-    raw_entries = lore.raw_observations()
-    stale_obs = _stale_observations(days)
+    raw_entries = lore.raw_signals()
+    stale_sigs = _stale_signals(days)
 
     return {
-        "stale_observations": stale_obs,
-        "stale_count": len(stale_obs),
+        "stale_signals": stale_sigs,
+        "stale_count": len(stale_sigs),
         "total_raw": len(raw_entries),
     }
 

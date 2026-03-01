@@ -15,6 +15,7 @@ Combines intent, failures, inbox, journal, and patterns into views that answer:
 - ecosystem_overlap: Command name conflicts
 - ecosystem_complexity: Projects exceeding thresholds
 - undocumented: Decisions/patterns without rationale
+- fleet_view: Fleet status synthesized by severity
 """
 
 import json
@@ -667,6 +668,66 @@ def blockers_view() -> dict:
         },
         "friction": friction(),
         "verification": verification,
+    }
+
+
+def fleet_view() -> dict:
+    """Fleet status synthesized by intervention severity.
+
+    Status classification (first match wins):
+      - unavailable: fleet.db missing
+      - critical: violations or scope overlap
+      - attention: expired leases, rule-of-three, or blind spots
+      - active: agents or active tasks present
+      - idle: everything empty
+    """
+    db_exists = fleet.FLEET_DB_PATH.exists()
+    if not db_exists:
+        return {"status": "unavailable"}
+
+    agents_data = fleet.agents()
+    active = fleet.active_tasks()
+    queue = fleet.merge_queue()
+    violations = fleet.invariant_violations()
+    expired = fleet.expired_leases()
+    overlap = fleet.scope_overlap()
+    rot = fleet.rule_of_three_violations()
+    spots = fleet.blind_spots()
+    tokens = fleet.token_summary()
+
+    task_counts = dict(Counter(t.get("status", "unknown") for t in active))
+
+    # Status classification (first match wins)
+    if violations or overlap:
+        status_val = "critical"
+    elif expired or rot or spots:
+        status_val = "attention"
+    elif agents_data or active:
+        status_val = "active"
+    else:
+        status_val = "idle"
+
+    return {
+        "status": status_val,
+        "agents": agents_data,
+        "tasks": task_counts,
+        "merge_queue": queue,
+        "violations": violations,
+        "expired_leases": expired,
+        "scope_overlap": overlap,
+        "rule_of_three": rot,
+        "blind_spots": spots,
+        "token_summary": tokens,
+        "counts": {
+            "agents": len(agents_data),
+            "tasks": len(active),
+            "merge_queue": len(queue),
+            "violations": len(violations),
+            "expired_leases": len(expired),
+            "scope_overlap": len(overlap),
+            "rule_of_three": len(rot),
+            "blind_spots": len(spots),
+        },
     }
 
 

@@ -929,3 +929,194 @@ class TestVerifyInBlockers:
         monkeypatch.setattr("praxis.spectrace.db_available", lambda: False)
         result = synthesis.blockers_view()
         assert result["verification"] is None
+
+
+# --- fleet_view() ---
+
+
+def _mock_fleet_empty(monkeypatch, tmp_path=None):
+    """Monkeypatch all fleet readers to return empty lists."""
+    from praxis import fleet
+
+    if tmp_path is None:
+        # Create a temp file so FLEET_DB_PATH.exists() returns True
+        import tempfile
+
+        f = tempfile.NamedTemporaryFile(suffix=".db", delete=False)
+        f.close()
+        monkeypatch.setattr(fleet, "FLEET_DB_PATH", Path(f.name))
+    else:
+        db = tmp_path / "fake-fleet.db"
+        db.touch()
+        monkeypatch.setattr(fleet, "FLEET_DB_PATH", db)
+    monkeypatch.setattr(fleet, "agents", lambda: [])
+    monkeypatch.setattr(fleet, "active_tasks", lambda: [])
+    monkeypatch.setattr(fleet, "merge_queue", lambda: [])
+    monkeypatch.setattr(fleet, "invariant_violations", lambda: [])
+    monkeypatch.setattr(fleet, "expired_leases", lambda: [])
+    monkeypatch.setattr(fleet, "scope_overlap", lambda: [])
+    monkeypatch.setattr(fleet, "rule_of_three_violations", lambda: [])
+    monkeypatch.setattr(fleet, "blind_spots", lambda: [])
+    monkeypatch.setattr(fleet, "token_summary", lambda: [])
+
+
+class TestFleetView:
+    def test_unavailable_when_db_missing(self, lore_dir, monkeypatch):
+        from praxis import fleet
+
+        monkeypatch.setattr(fleet, "FLEET_DB_PATH", Path("/tmp/no-such-fleet.db"))
+        result = synthesis.fleet_view()
+        assert result["status"] == "unavailable"
+        assert "agents" not in result
+
+    def test_idle_when_empty(self, lore_dir, monkeypatch):
+        _mock_fleet_empty(monkeypatch)
+        result = synthesis.fleet_view()
+        assert result["status"] == "idle"
+        assert result["counts"]["agents"] == 0
+        assert result["counts"]["tasks"] == 0
+
+    def test_active_with_agents(self, lore_dir, monkeypatch):
+        _mock_fleet_empty(monkeypatch)
+        from praxis import fleet
+
+        monkeypatch.setattr(
+            fleet,
+            "agents",
+            lambda: [{"agent_id": "a-1", "role": "dev", "model": "opus"}],
+        )
+        result = synthesis.fleet_view()
+        assert result["status"] == "active"
+        assert result["counts"]["agents"] == 1
+
+    def test_active_with_tasks(self, lore_dir, monkeypatch):
+        _mock_fleet_empty(monkeypatch)
+        from praxis import fleet
+
+        monkeypatch.setattr(
+            fleet,
+            "active_tasks",
+            lambda: [{"task_id": "t-1", "status": "in_progress"}],
+        )
+        result = synthesis.fleet_view()
+        assert result["status"] == "active"
+        assert result["tasks"]["in_progress"] == 1
+
+    def test_attention_with_expired_leases(self, lore_dir, monkeypatch):
+        _mock_fleet_empty(monkeypatch)
+        from praxis import fleet
+
+        monkeypatch.setattr(
+            fleet,
+            "expired_leases",
+            lambda: [{"task_id": "t-1", "claimed_by": "a-1", "minutes_overdue": 15}],
+        )
+        result = synthesis.fleet_view()
+        assert result["status"] == "attention"
+
+    def test_attention_with_rule_of_three(self, lore_dir, monkeypatch):
+        _mock_fleet_empty(monkeypatch)
+        from praxis import fleet
+
+        monkeypatch.setattr(
+            fleet,
+            "rule_of_three_violations",
+            lambda: [{"signature": "sig-x", "agent_id": "a-1", "occurrence_count": 4}],
+        )
+        result = synthesis.fleet_view()
+        assert result["status"] == "attention"
+
+    def test_attention_with_blind_spots(self, lore_dir, monkeypatch):
+        _mock_fleet_empty(monkeypatch)
+        from praxis import fleet
+
+        monkeypatch.setattr(
+            fleet,
+            "blind_spots",
+            lambda: [{"signature": "sig-y", "occurrences": 5}],
+        )
+        result = synthesis.fleet_view()
+        assert result["status"] == "attention"
+
+    def test_critical_with_violations(self, lore_dir, monkeypatch):
+        _mock_fleet_empty(monkeypatch)
+        from praxis import fleet
+
+        monkeypatch.setattr(
+            fleet,
+            "invariant_violations",
+            lambda: [{"code": "INV-A", "message": "bad", "subject_id": "t-1"}],
+        )
+        result = synthesis.fleet_view()
+        assert result["status"] == "critical"
+
+    def test_critical_with_scope_overlap(self, lore_dir, monkeypatch):
+        _mock_fleet_empty(monkeypatch)
+        from praxis import fleet
+
+        monkeypatch.setattr(
+            fleet,
+            "scope_overlap",
+            lambda: [{"task_id_a": "t-1", "task_id_b": "t-2", "shared_file": "f.py"}],
+        )
+        result = synthesis.fleet_view()
+        assert result["status"] == "critical"
+
+    def test_critical_overrides_attention(self, lore_dir, monkeypatch):
+        """Violations + expired leases = critical, not attention."""
+        _mock_fleet_empty(monkeypatch)
+        from praxis import fleet
+
+        monkeypatch.setattr(
+            fleet,
+            "invariant_violations",
+            lambda: [{"code": "INV-B", "message": "x", "subject_id": "t-1"}],
+        )
+        monkeypatch.setattr(
+            fleet,
+            "expired_leases",
+            lambda: [{"task_id": "t-1", "claimed_by": "a-1", "minutes_overdue": 5}],
+        )
+        result = synthesis.fleet_view()
+        assert result["status"] == "critical"
+
+    def test_counts_correctness(self, lore_dir, monkeypatch):
+        _mock_fleet_empty(monkeypatch)
+        from praxis import fleet
+
+        monkeypatch.setattr(
+            fleet, "agents", lambda: [{"agent_id": "a-1"}, {"agent_id": "a-2"}]
+        )
+        monkeypatch.setattr(
+            fleet,
+            "active_tasks",
+            lambda: [
+                {"task_id": "t-1", "status": "in_progress"},
+                {"task_id": "t-2", "status": "in_progress"},
+                {"task_id": "t-3", "status": "unclaimed"},
+            ],
+        )
+        monkeypatch.setattr(
+            fleet,
+            "merge_queue",
+            lambda: [{"task_id": "t-4", "status": "approved"}],
+        )
+        result = synthesis.fleet_view()
+        assert result["counts"]["agents"] == 2
+        assert result["counts"]["tasks"] == 3
+        assert result["counts"]["merge_queue"] == 1
+        assert result["tasks"]["in_progress"] == 2
+        assert result["tasks"]["unclaimed"] == 1
+
+    def test_token_summary_included(self, lore_dir, monkeypatch):
+        _mock_fleet_empty(monkeypatch)
+        from praxis import fleet
+
+        monkeypatch.setattr(
+            fleet,
+            "token_summary",
+            lambda: [{"agent_id": "a-1", "model": "opus", "total_tokens": 5000}],
+        )
+        result = synthesis.fleet_view()
+        assert len(result["token_summary"]) == 1
+        assert result["token_summary"][0]["total_tokens"] == 5000

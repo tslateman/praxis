@@ -209,3 +209,109 @@ class TestInvariantViolations:
 
     def test_missing_db_returns_empty(self, missing_fleet_db):
         assert fleet.invariant_violations() == []
+
+
+class TestRuleOfThreeViolations:
+    def test_clean_db_has_none(self, fleet_db):
+        assert fleet.rule_of_three_violations() == []
+
+    def test_missing_db_returns_empty(self, missing_fleet_db):
+        assert fleet.rule_of_three_violations() == []
+
+    def test_detects_repeated_failures(self, fleet_db):
+        conn = sqlite3.connect(str(fleet_db))
+        for i in range(4):
+            conn.execute(
+                "INSERT INTO failures "
+                "(agent_id, task_id, error_type, error_message, signature, created_at) "
+                "VALUES ('agent-1', 'task-2', 'ToolError', 'same error', "
+                "'sig-abc', datetime('now'))"
+            )
+        conn.commit()
+        conn.close()
+        result = fleet.rule_of_three_violations()
+        assert len(result) == 1
+        assert result[0]["signature"] == "sig-abc"
+        assert result[0]["occurrence_count"] >= 3
+
+
+class TestBlindSpots:
+    def test_clean_db_has_none(self, fleet_db):
+        assert fleet.blind_spots() == []
+
+    def test_missing_db_returns_empty(self, missing_fleet_db):
+        assert fleet.blind_spots() == []
+
+    def test_detects_unaddressed_failures(self, fleet_db):
+        conn = sqlite3.connect(str(fleet_db))
+        for i in range(4):
+            conn.execute(
+                "INSERT INTO failures "
+                "(agent_id, task_id, error_type, error_message, signature, created_at) "
+                "VALUES ('agent-1', 'task-2', 'Stall', 'stuck again', "
+                "'sig-blind', datetime('now', '-1 hour'))"
+            )
+        conn.commit()
+        conn.close()
+        result = fleet.blind_spots()
+        assert len(result) >= 1
+        sigs = [r.get("signature") for r in result]
+        assert "sig-blind" in sigs
+
+
+class TestScopeOverlap:
+    def test_no_overlap_in_fixture(self, fleet_db):
+        assert fleet.scope_overlap() == []
+
+    def test_missing_db_returns_empty(self, missing_fleet_db):
+        assert fleet.scope_overlap() == []
+
+    def test_detects_shared_files(self, fleet_db):
+        conn = sqlite3.connect(str(fleet_db))
+        # Create two in_progress tasks with overlapping scope_in
+        conn.execute(
+            "INSERT INTO tasks "
+            "(task_id, team_id, status, title, scope_in, created_at, updated_at) "
+            "VALUES ('task-ov-1', 'team-1', 'draft', 'Overlap A', "
+            "'[\"src/main.py\", \"src/utils.py\"]', datetime('now'), datetime('now'))"
+        )
+        conn.execute(
+            "UPDATE tasks SET status = 'unclaimed', updated_at = datetime('now') "
+            "WHERE task_id = 'task-ov-1'"
+        )
+        conn.execute(
+            "UPDATE tasks SET status = 'claimed', "
+            "claimed_by = 'agent-1', claimed_at = datetime('now'), "
+            "lease_expires = datetime('now', '+30 minutes'), "
+            "updated_at = datetime('now') WHERE task_id = 'task-ov-1'"
+        )
+        conn.execute(
+            "UPDATE tasks SET status = 'in_progress', updated_at = datetime('now') "
+            "WHERE task_id = 'task-ov-1'"
+        )
+        conn.execute(
+            "INSERT INTO tasks "
+            "(task_id, team_id, status, title, scope_in, created_at, updated_at) "
+            "VALUES ('task-ov-2', 'team-1', 'draft', 'Overlap B', "
+            "'[\"src/main.py\", \"src/other.py\"]', datetime('now'), datetime('now'))"
+        )
+        conn.execute(
+            "UPDATE tasks SET status = 'unclaimed', updated_at = datetime('now') "
+            "WHERE task_id = 'task-ov-2'"
+        )
+        conn.execute(
+            "UPDATE tasks SET status = 'claimed', "
+            "claimed_by = 'agent-1', claimed_at = datetime('now'), "
+            "lease_expires = datetime('now', '+30 minutes'), "
+            "updated_at = datetime('now') WHERE task_id = 'task-ov-2'"
+        )
+        conn.execute(
+            "UPDATE tasks SET status = 'in_progress', updated_at = datetime('now') "
+            "WHERE task_id = 'task-ov-2'"
+        )
+        conn.commit()
+        conn.close()
+        result = fleet.scope_overlap()
+        assert len(result) >= 1
+        files = [r["shared_file"] for r in result]
+        assert "src/main.py" in files

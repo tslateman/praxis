@@ -72,3 +72,18 @@ def merge_queue() -> list[dict]:
         "WHERE status IN ('approved', 'ready_for_review') "
         "ORDER BY updated_at"
     )
+
+
+def rule_of_three_violations() -> list[dict]:
+    """Failure signatures appearing 3+ times in the last hour per agent."""
+    return _query("SELECT * FROM rule_of_three_violations")
+
+
+def blind_spots() -> list[dict]:
+    """Recurring failures with no intervention in 7 days."""
+    return _query("SELECT * FROM blind_spots")
+
+
+def scope_overlap() -> list[dict]:
+    """Active task pairs sharing files in scope_in."""
+    return _query("SELECT * FROM scope_overlap")

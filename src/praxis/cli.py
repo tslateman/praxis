@@ -9,7 +9,7 @@ import json
 import subprocess
 import sys
 
-from praxis import fleet, synthesis, watchdog
+from praxis import synthesis, watchdog
 
 
 def parse_time(val: str) -> int:
@@ -783,51 +783,91 @@ def cmd_decide(args):
 
 
 def cmd_fleet(args):
-    """Fleet status: agents, tasks, merge queue, violations."""
-    from collections import Counter
-
-    agents = fleet.agents()
-    tasks = fleet.active_tasks()
-    violations = fleet.invariant_violations()
-    expired = fleet.expired_leases()
-    queue = fleet.merge_queue()
+    """Fleet status synthesized by intervention severity."""
+    result = synthesis.fleet_view()
 
     if args.json:
-        print(
-            json.dumps(
-                {
-                    "agents": agents,
-                    "active_tasks": tasks,
-                    "merge_queue": queue,
-                    "violations": violations,
-                    "expired_leases": expired,
-                },
-                indent=2,
-            )
-        )
+        print(json.dumps(result, indent=2))
         return
 
-    task_counts = Counter(t.get("status", "unknown") for t in tasks)
+    status_val = result["status"].upper()
+    print(f"Fleet: {status_val}")
 
-    print(f"Agents: {len(agents)} active")
+    if result["status"] == "unavailable":
+        print("  fleet.db not found.")
+        return
+
+    counts = result["counts"]
+
+    # --- Critical ---
+    if result["violations"]:
+        print()
+        print(f"Violations ({counts['violations']}):")
+        for v in result["violations"]:
+            code = v.get("code", "?")
+            msg = v.get("message", "")
+            subj = v.get("subject_id", "?")
+            print(f"  {code}: {msg} ({subj})")
+
+    if result["scope_overlap"]:
+        print()
+        print(f"Scope Overlap ({counts['scope_overlap']}):")
+        # Group by task pair
+        pairs: dict[tuple, list] = {}
+        for o in result["scope_overlap"]:
+            key = (o.get("task_id_a", "?"), o.get("task_id_b", "?"))
+            pairs.setdefault(key, []).append(o.get("shared_file", "?"))
+        for (a, b), files in pairs.items():
+            print(f"  {a} <-> {b}: {', '.join(files)}")
+
+    # --- Attention ---
+    if result["expired_leases"]:
+        print()
+        print(f"Expired Leases ({counts['expired_leases']}):")
+        for e in result["expired_leases"]:
+            mins = e.get("minutes_overdue", 0)
+            tid = e.get("task_id", "?")
+            agent = e.get("claimed_by", "?")
+            print(f"  {tid} claimed by {agent} ({mins:.0f}m overdue)")
+
+    if result["rule_of_three"]:
+        print()
+        print(f"Rule of Three ({counts['rule_of_three']}):")
+        for r in result["rule_of_three"]:
+            sig = r.get("signature", "?")
+            agent = r.get("agent_id", "?")
+            n = r.get("occurrence_count", 0)
+            print(f"  {sig} ({agent}): {n}x in last hour")
+
+    if result["blind_spots"]:
+        print()
+        print(f"Blind Spots ({counts['blind_spots']}):")
+        for b in result["blind_spots"]:
+            sig = b.get("signature") or b.get("error_type", "?")
+            n = b.get("occurrences", 0)
+            print(f"  {sig}: {n} failures, no intervention")
+
+    # --- Active ---
+    agents = result["agents"]
+    print()
+    print(f"Agents: {counts['agents']} active")
     if agents:
         for a in agents:
             role = a.get("role", "?")
             model = a.get("model", "?")
             print(f"  {a.get('agent_id', '?')} [{role}] ({model})")
 
-    print()
+    task_counts = result["tasks"]
     if task_counts:
-        print("Tasks:")
-        for status, count in sorted(task_counts.items()):
-            print(f"  {status}: {count}")
-    else:
-        print("No active fleet tasks.")
-
-    if queue:
         print()
-        print("Merge Queue:")
-        for t in queue:
+        print("Tasks:")
+        for st, count in sorted(task_counts.items()):
+            print(f"  {st}: {count}")
+
+    if result["merge_queue"]:
+        print()
+        print(f"Merge Queue ({counts['merge_queue']}):")
+        for t in result["merge_queue"]:
             branch = t.get("branch", "")
             suffix = f" ({branch})" if branch else ""
             tid = t.get("task_id", "?")
@@ -835,23 +875,15 @@ def cmd_fleet(args):
             title = t.get("title", "")
             print(f"  {tid} [{st}] {title}{suffix}")
 
-    if violations:
+    # --- Cost ---
+    if result["token_summary"]:
         print()
-        print(f"Violations ({len(violations)}):")
-        for v in violations:
-            code = v.get("code", "?")
-            msg = v.get("message", "")
-            subj = v.get("subject_id", "?")
-            print(f"  {code}: {msg} ({subj})")
-
-    if expired:
-        print()
-        print(f"Expired Leases ({len(expired)}):")
-        for e in expired:
-            mins = e.get("minutes_overdue", 0)
-            tid = e.get("task_id", "?")
-            agent = e.get("claimed_by", "?")
-            print(f"  {tid} claimed by {agent} ({mins:.0f}m overdue)")
+        print("Token Usage:")
+        for t in result["token_summary"]:
+            agent = t.get("agent_id", "?")
+            model = t.get("model", "?")
+            total = t.get("total_tokens", 0)
+            print(f"  {agent} ({model}): {total:,} tokens")
 
 
 def main():

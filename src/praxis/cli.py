@@ -69,6 +69,11 @@ def cmd_status(args):
     else:
         print("No active goals.")
 
+    verification = result.get("verification")
+    if verification and verification != "unavailable":
+        print()
+        print(f"Verification: {verification.upper()}")
+
     blockers = result["blockers"]
     if blockers["recent_failures"] > 0 or blockers["stale_signals"] > 0:
         print()
@@ -131,6 +136,16 @@ def cmd_blockers(args):
         print("Friction Points:")
         for f in friction_data:
             print(f"  {f['boundary']}: {f['failure_count']} failures")
+
+    verification = result.get("verification")
+    if verification:
+        print()
+        print(f"Verification ({verification['status'].upper()}):")
+        for item in verification["items"]:
+            if item["type"] == "high_risk_failing":
+                print(f"  FAILING: {item['id']} {item['title']}")
+            elif item["type"] == "stale_link":
+                print(f"  STALE: {item['test_nodeid']} -> {item['requirement']}")
 
 
 def cmd_health(args):
@@ -226,6 +241,107 @@ def cmd_health(args):
             print('  Fix: lore remember "<decision>" --rationale "why"')
         if undoc["patterns"]:
             print('  Fix: lore learn "<pattern>" --problem "what it solves"')
+
+    v = result.get("verification", {})
+    if v.get("status") and v["status"] != "unavailable":
+        print()
+        v_status = v["status"].upper()
+        cov = v.get("coverage") or {}
+        print(f"Verification: {v_status}")
+        if cov:
+            print(
+                f"  Coverage: {cov.get('passing', 0)} passing, "
+                f"{cov.get('failing', 0)} failing, "
+                f"{cov.get('untested', 0)} untested"
+            )
+        print(f"  Orphans: {v.get('orphan_count', 0)}")
+        print(f"  Stale links: {v.get('stale_link_count', 0)}")
+
+
+def cmd_verify(args):
+    """Ground-truth verification: does code match the written record?"""
+    result = synthesis.verify()
+
+    if args.json:
+        print(json.dumps(result, indent=2))
+        return
+
+    status_val = result["status"].upper()
+    print(f"Verification: {status_val}")
+
+    if result["status"] == "unavailable":
+        print("  SpecTrace DB not found.")
+        return
+
+    # Coverage
+    cov = result.get("coverage") or {}
+    if cov:
+        print()
+        print("Coverage:")
+        print(
+            f"  {cov['passing']} passing, {cov['failing']} failing, "
+            f"{cov['untested']} untested ({cov['total']} total)"
+        )
+
+    # Last run
+    last = result.get("last_run")
+    if last:
+        print()
+        print("Last Test Run:")
+        print(f"  {last.get('imported_at', '?')}")
+        print(
+            f"  {last.get('passed', 0)} passed, {last.get('failed', 0)} failed, "
+            f"{last.get('errors', 0)} errors, {last.get('skipped', 0)} skipped"
+        )
+        if last.get("git_branch"):
+            print(f"  Branch: {last['git_branch']}")
+        if last.get("git_sha"):
+            print(f"  SHA: {last['git_sha'][:12]}")
+
+    # Orphans
+    orphans = result.get("orphans", [])
+    if orphans:
+        print()
+        print(f"Orphan Requirements ({result['orphan_count']}):")
+        for o in orphans[:10]:
+            risk = o.get("risk_level", "?")
+            print(f"  {o['external_id']}  [{risk}]  {o['title']}")
+        if len(orphans) > 10:
+            print(f"  ... and {len(orphans) - 10} more")
+
+    # Stale links
+    stale = result.get("stale_links", [])
+    if stale:
+        print()
+        print(f"Stale Test Links ({result['stale_link_count']}):")
+        for s in stale[:10]:
+            print(f"  {s['test_nodeid']} -> {s['req_external_id']}")
+        if len(stale) > 10:
+            print(f"  ... and {len(stale) - 10} more")
+
+    # High-risk issues
+    hr = result.get("high_risk", {})
+    if hr.get("failing"):
+        print()
+        print("High-Risk Failing:")
+        for h in hr["failing"]:
+            print(
+                f"  {h['external_id']}  [{h['risk_level']}]  "
+                f"{h['title']}  ({h['failing_count']} failing)"
+            )
+    if hr.get("untested"):
+        print()
+        print("High-Risk Untested:")
+        for h in hr["untested"]:
+            print(f"  {h['external_id']}  [{h['risk_level']}]  {h['title']}")
+
+    # Integration risks
+    integration = result.get("integration_risks", [])
+    if integration:
+        print()
+        print("Integration Risks:")
+        for r in integration:
+            print(f"  [{r['level']}] {r['task_a']} <-> {r['task_b']} ({r['reason']})")
 
 
 def cmd_triggers(args):
@@ -476,6 +592,20 @@ def cmd_context(args):
     ):
         print()
         print("(no matching items)")
+
+    gt = result.get("ground_truth")
+    if gt:
+        print()
+        print(f"Ground Truth: {gt['verification'].upper()}")
+        cov = gt.get("coverage") or {}
+        if cov:
+            print(
+                f"  Coverage: {cov.get('passing', 0)} passing, "
+                f"{cov.get('failing', 0)} failing, "
+                f"{cov.get('untested', 0)} untested"
+            )
+        if gt.get("orphan_count", 0) > 0:
+            print(f"  Orphans: {gt['orphan_count']}")
 
     print()
     trunc = " (truncated)" if result["truncated"] else ""
@@ -761,6 +891,10 @@ def main():
     p.add_argument("--debug", action="store_true", help="Show relevance scores")
     p.add_argument("--json", action="store_true", help="Output raw JSON")
     p.set_defaults(func=cmd_context)
+
+    p = sub.add_parser("verify", help="Ground-truth verification against code")
+    p.add_argument("--json", action="store_true", help="Output raw JSON")
+    p.set_defaults(func=cmd_verify)
 
     # -- Analysis commands --
 

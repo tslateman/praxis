@@ -35,6 +35,7 @@ from zero to productive.
 | `praxis blind-spots`  | Recurring failures without decisions            |
 | `praxis refinement`   | Decisions ripe for promotion to patterns        |
 | `praxis context`      | Filtered context brief for agent prompts        |
+| `praxis verify`       | Ground-truth verification against code          |
 | `praxis drift`        | Decision reversals over time                    |
 | `praxis stale`        | Observations aging without action               |
 | `praxis overlap`      | Command name conflicts across projects          |
@@ -45,7 +46,7 @@ from zero to productive.
 ## Architecture
 
 - **Storage**: None. Lore owns all data.
-- **Reads from**: Lore (intent, failures, inbox, journal, patterns)
+- **Reads from**: Lore (intent, failures, inbox, journal, patterns), SpecTrace (requirements, test results)
 - **Writes via**: Delegation to `lore` CLI
 - **Dependencies**: Python 3.10+, PyYAML, Lore
 

@@ -5,6 +5,7 @@ Combines intent, failures, inbox, journal, and patterns into views that answer:
 - next: What should I work on?
 - blockers: What's in the way?
 - health: Ecosystem pulse (failures + hygiene)
+- verify: Ground-truth verification (code matches record)
 - triggers: Recurring failure types
 - friction: Project boundary issues
 - blind_spots: Failures without decisions
@@ -72,12 +73,17 @@ def status() -> dict:
         except (ValueError, TypeError):
             continue
 
+    # Verification status
+    v = verify()
+    verification_status = v["status"]
+
     # Determine pulse
     if (
         len(recent_failures) > 5
         or len(stale_obs) > 10
         or len(fleet_violations) > 0
         or len(fleet_expired) > 0
+        or verification_status == "drifted"
     ):
         pulse = "attention"
     elif len(recent_failures) > 0 or len(stale_obs) > 0 or len(fleet_tasks) > 0:
@@ -98,6 +104,7 @@ def status() -> dict:
             "recent_failures": len(recent_failures),
             "stale_signals": len(stale_obs),
         },
+        "verification": verification_status,
         "pulse": pulse,
     }
 
@@ -513,6 +520,17 @@ def context(
         },
     )
 
+    # Ground truth — outside token budget so agents always see it
+    ground_truth = None
+    if spectrace.db_available():
+        coverage = spectrace.coverage_summary()
+        orphans = spectrace.orphan_requirements()
+        ground_truth = {
+            "verification": verify()["status"],
+            "coverage": coverage,
+            "orphan_count": len(orphans),
+        }
+
     return {
         "evidence": out_evidence,
         "patterns": out_patterns,
@@ -520,6 +538,7 @@ def context(
         "decisions": out_decisions,
         "goals": out_goals,
         "contentions": contentions,
+        "ground_truth": ground_truth,
         "filters_applied": {
             "tags": tags or [],
             "project": project or "",
@@ -527,6 +546,63 @@ def context(
         },
         "token_estimate": used,
         "truncated": truncated,
+    }
+
+
+def verify() -> dict:
+    """Ground-truth verification: does code agree with the written record?
+
+    Composes spectrace readers into a verification view.
+
+    Status logic:
+    - unavailable: DB not found
+    - drifted: high-risk requirements failing OR >5 stale links
+    - uncovered: orphans exist OR untested > passing
+    - verified: all active requirements passing
+    - partial: everything else
+    """
+    if not spectrace.db_available():
+        return {"status": "unavailable"}
+
+    coverage = spectrace.coverage_summary()
+    orphans = spectrace.orphan_requirements()
+    stale = spectrace.stale_links()
+    high_risk = spectrace.high_risk_issues()
+    last_run = spectrace.latest_test_run()
+    integration = spectrace.integration_risks()
+
+    # Classify high-risk issues
+    high_risk_failing = [h for h in high_risk if h.get("failing_count", 0) > 0]
+    high_risk_untested = [
+        h
+        for h in high_risk
+        if h.get("link_count", 0) == 0 or h.get("verification_status") == "untested"
+    ]
+
+    # Determine status
+    if high_risk_failing or len(stale) > 5:
+        status_val = "drifted"
+    elif orphans or (coverage and coverage["untested"] > coverage["passing"]):
+        status_val = "uncovered"
+    elif coverage and coverage["failing"] == 0 and coverage["untested"] == 0:
+        status_val = "verified"
+    else:
+        status_val = "partial"
+
+    return {
+        "status": status_val,
+        "coverage": coverage,
+        "orphan_count": len(orphans),
+        "orphans": orphans,
+        "stale_link_count": len(stale),
+        "stale_links": stale,
+        "high_risk": {
+            "total": len(high_risk),
+            "failing": high_risk_failing,
+            "untested": high_risk_untested,
+        },
+        "integration_risks": integration,
+        "last_run": last_run,
     }
 
 
@@ -552,6 +628,33 @@ def blockers_view() -> dict:
 
     by_type = Counter(f.get("error_type", "unknown") for f in recent_failures)
 
+    # Verification blockers
+    v = verify()
+    verification = None
+    if v["status"] != "unavailable":
+        items = []
+        for issue in v.get("high_risk", {}).get("failing", []):
+            items.append(
+                {
+                    "type": "high_risk_failing",
+                    "id": issue.get("external_id", ""),
+                    "title": issue.get("title", ""),
+                }
+            )
+        for link in v.get("stale_links", [])[:10]:
+            items.append(
+                {
+                    "type": "stale_link",
+                    "test_nodeid": link.get("test_nodeid", ""),
+                    "requirement": link.get("req_external_id", ""),
+                }
+            )
+        verification = {
+            "status": v["status"],
+            "items": items,
+            "count": len(items),
+        }
+
     return {
         "failures": {
             "recent": recent_failures,
@@ -563,6 +666,7 @@ def blockers_view() -> dict:
             "count": len(_stale_signals(days=7)),
         },
         "friction": friction(),
+        "verification": verification,
     }
 
 
@@ -605,6 +709,10 @@ def health() -> dict:
     fleet_active = fleet.active_tasks()
     fleet_failures = fleet.failures()
 
+    # Verification
+    v = verify()
+    verification_status = v["status"]
+
     # Determine status
     has_critical_triggers = any(t["count"] >= 5 for t in trigger_results)
     has_blind_spots = blind_spot_results["blind_spot_count"] > 0
@@ -620,7 +728,12 @@ def health() -> dict:
     )
     has_fleet_violations = len(fleet_violations) > 0
 
-    if has_blind_spots or has_critical_triggers or has_fleet_violations:
+    if (
+        has_blind_spots
+        or has_critical_triggers
+        or has_fleet_violations
+        or verification_status == "drifted"
+    ):
         status_val = "critical"
     elif (
         stale_results["stale_count"] > 0
@@ -630,6 +743,7 @@ def health() -> dict:
         or has_undocumented
         or refinement_total > 0
         or len(fleet_expired) > 0
+        or verification_status == "uncovered"
     ):
         status_val = "attention"
     else:
@@ -655,6 +769,7 @@ def health() -> dict:
             "expired_leases": len(fleet_expired),
             "failures": len(fleet_failures),
         },
+        "verification": v,
         "triggers": trigger_results,
         "stale_signals": stale_results["stale_signals"],
         "blind_spots": blind_spot_results["orphaned_failures"],

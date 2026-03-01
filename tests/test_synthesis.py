@@ -736,3 +736,196 @@ class TestParseClaude:
 
     def test_empty_content(self):
         assert synthesis._parse_claude_md_commands("", "praxis") == []
+
+
+# --- verify() ---
+
+
+def _mock_spectrace_available(monkeypatch):
+    """Mock spectrace readers to return realistic data."""
+    monkeypatch.setattr("praxis.spectrace.db_available", lambda: True)
+    monkeypatch.setattr(
+        "praxis.spectrace.coverage_summary",
+        lambda: {"passing": 10, "failing": 2, "untested": 3, "total": 15},
+    )
+    monkeypatch.setattr(
+        "praxis.spectrace.orphan_requirements",
+        lambda: [{"external_id": "R-003", "title": "Orphan", "risk_level": "medium"}],
+    )
+    monkeypatch.setattr("praxis.spectrace.stale_links", lambda: [])
+    monkeypatch.setattr(
+        "praxis.spectrace.high_risk_issues",
+        lambda: [
+            {
+                "external_id": "R-001",
+                "title": "Auth",
+                "risk_level": "critical",
+                "verification_status": "passing",
+                "link_count": 2,
+                "failing_count": 0,
+            }
+        ],
+    )
+    monkeypatch.setattr(
+        "praxis.spectrace.latest_test_run",
+        lambda: {"id": 1, "passed": 8, "failed": 2, "git_branch": "main"},
+    )
+    monkeypatch.setattr("praxis.spectrace.integration_risks", lambda: [])
+
+
+class TestVerify:
+    def test_returns_expected_keys(self, lore_dir, monkeypatch):
+        _mock_spectrace_available(monkeypatch)
+        result = synthesis.verify()
+        assert "status" in result
+        assert "coverage" in result
+        assert "orphan_count" in result
+        assert "stale_link_count" in result
+        assert "high_risk" in result
+        assert "last_run" in result
+        assert "integration_risks" in result
+
+    def test_unavailable_when_no_db(self, lore_dir, monkeypatch):
+        monkeypatch.setattr("praxis.spectrace.db_available", lambda: False)
+        result = synthesis.verify()
+        assert result["status"] == "unavailable"
+        assert "coverage" not in result
+
+    def test_drifted_with_high_risk_failing(self, lore_dir, monkeypatch):
+        _mock_spectrace_available(monkeypatch)
+        monkeypatch.setattr(
+            "praxis.spectrace.high_risk_issues",
+            lambda: [
+                {
+                    "external_id": "R-002",
+                    "title": "Failing",
+                    "risk_level": "high",
+                    "verification_status": "failing",
+                    "link_count": 1,
+                    "failing_count": 1,
+                }
+            ],
+        )
+        result = synthesis.verify()
+        assert result["status"] == "drifted"
+
+    def test_drifted_with_many_stale_links(self, lore_dir, monkeypatch):
+        _mock_spectrace_available(monkeypatch)
+        stale = [{"test_nodeid": f"test_{i}", "requirement_id": i} for i in range(6)]
+        monkeypatch.setattr("praxis.spectrace.stale_links", lambda: stale)
+        result = synthesis.verify()
+        assert result["status"] == "drifted"
+
+    def test_uncovered_with_orphans(self, lore_dir, monkeypatch):
+        _mock_spectrace_available(monkeypatch)
+        # No high-risk failing, no stale links, but orphans exist
+        monkeypatch.setattr("praxis.spectrace.high_risk_issues", lambda: [])
+        result = synthesis.verify()
+        assert result["status"] == "uncovered"
+
+    def test_verified_when_all_passing(self, lore_dir, monkeypatch):
+        _mock_spectrace_available(monkeypatch)
+        monkeypatch.setattr(
+            "praxis.spectrace.coverage_summary",
+            lambda: {"passing": 15, "failing": 0, "untested": 0, "total": 15},
+        )
+        monkeypatch.setattr("praxis.spectrace.orphan_requirements", lambda: [])
+        monkeypatch.setattr("praxis.spectrace.high_risk_issues", lambda: [])
+        result = synthesis.verify()
+        assert result["status"] == "verified"
+
+    def test_partial_default(self, lore_dir, monkeypatch):
+        _mock_spectrace_available(monkeypatch)
+        monkeypatch.setattr("praxis.spectrace.orphan_requirements", lambda: [])
+        monkeypatch.setattr("praxis.spectrace.high_risk_issues", lambda: [])
+        # Still has failing and untested but untested <= passing
+        result = synthesis.verify()
+        assert result["status"] == "partial"
+
+
+class TestVerifyInHealth:
+    def test_health_includes_verification(self, lore_dir, monkeypatch):
+        _mock_spectrace_available(monkeypatch)
+        result = synthesis.health()
+        assert "verification" in result
+        assert "status" in result["verification"]
+
+    def test_health_critical_when_drifted(self, lore_dir, monkeypatch):
+        _mock_spectrace_available(monkeypatch)
+        monkeypatch.setattr(
+            "praxis.spectrace.high_risk_issues",
+            lambda: [
+                {
+                    "external_id": "R-X",
+                    "title": "Bad",
+                    "risk_level": "critical",
+                    "verification_status": "failing",
+                    "link_count": 1,
+                    "failing_count": 1,
+                }
+            ],
+        )
+        result = synthesis.health()
+        assert result["status"] == "critical"
+
+    def test_health_attention_when_uncovered(self, lore_dir, monkeypatch):
+        _mock_spectrace_available(monkeypatch)
+        # orphans exist -> uncovered -> attention
+        monkeypatch.setattr("praxis.spectrace.high_risk_issues", lambda: [])
+        result = synthesis.health()
+        # Could be attention or higher depending on other signals
+        assert result["status"] in ("attention", "critical")
+
+
+class TestVerifyInStatus:
+    def test_status_includes_verification(self, lore_dir, monkeypatch):
+        _mock_spectrace_available(monkeypatch)
+        result = synthesis.status()
+        assert "verification" in result
+
+    def test_pulse_attention_when_drifted(self, lore_dir, monkeypatch):
+        _mock_spectrace_available(monkeypatch)
+        monkeypatch.setattr(
+            "praxis.spectrace.high_risk_issues",
+            lambda: [
+                {
+                    "external_id": "R-X",
+                    "title": "Bad",
+                    "risk_level": "critical",
+                    "verification_status": "failing",
+                    "link_count": 1,
+                    "failing_count": 1,
+                }
+            ],
+        )
+        result = synthesis.status()
+        assert result["pulse"] == "attention"
+
+
+class TestVerifyInContext:
+    def test_context_includes_ground_truth(self, lore_dir, monkeypatch):
+        _mock_spectrace_available(monkeypatch)
+        result = synthesis.context(budget=50000)
+        assert "ground_truth" in result
+        gt = result["ground_truth"]
+        assert gt is not None
+        assert "verification" in gt
+        assert "coverage" in gt
+        assert "orphan_count" in gt
+
+    def test_context_ground_truth_none_when_unavailable(self, lore_dir, monkeypatch):
+        monkeypatch.setattr("praxis.spectrace.db_available", lambda: False)
+        result = synthesis.context(budget=50000)
+        assert result["ground_truth"] is None
+
+
+class TestVerifyInBlockers:
+    def test_blockers_includes_verification(self, lore_dir, monkeypatch):
+        _mock_spectrace_available(monkeypatch)
+        result = synthesis.blockers_view()
+        assert "verification" in result
+
+    def test_blockers_verification_none_when_unavailable(self, lore_dir, monkeypatch):
+        monkeypatch.setattr("praxis.spectrace.db_available", lambda: False)
+        result = synthesis.blockers_view()
+        assert result["verification"] is None

@@ -51,6 +51,7 @@ def lore_dir(tmp_path, monkeypatch):
     """
     # Mock spectrace by default
     monkeypatch.setattr("praxis.spectrace.fetch_tasks", lambda: [])
+    monkeypatch.setattr("praxis.spectrace.db_available", lambda: False)
 
     # -- Failures --
     _write_jsonl(
@@ -356,6 +357,7 @@ def empty_lore_dir(tmp_path, monkeypatch):
 
     monkeypatch.setattr(lore_mod, "LORE_DIR", tmp_path)
     monkeypatch.setattr("praxis.spectrace.fetch_tasks", lambda: [])
+    monkeypatch.setattr("praxis.spectrace.db_available", lambda: False)
     lore_mod.cache_clear()
 
     yield tmp_path

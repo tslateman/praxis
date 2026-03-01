@@ -1011,6 +1011,176 @@ def refinement(min_cluster: int = 3, stale_days: int = 14) -> dict:
     }
 
 
+def drift(
+    tags: list[str] | None = None,
+    project: str | None = None,
+    since_days: int | None = None,
+) -> dict:
+    """Track decision reversals over time.
+
+    Surfaces three signals:
+    1. Reversals — decisions with outcome='revised' paired with replacements
+       found via related_decisions links.
+    2. Volatile tags — tags ranked by reversal frequency.
+    3. Revision chains — connected sequences showing how thinking evolved
+       on a topic.
+
+    Filters narrow results by tag match, project entity, or recency.
+    """
+    decs = lore.decisions()
+    cutoff = None
+    if since_days is not None:
+        cutoff = _now() - timedelta(days=since_days)
+
+    dec_by_id: dict[str, dict] = {}
+    for d in decs:
+        did = d.get("id", "")
+        if did:
+            dec_by_id[did] = d
+
+    def _matches_filter(d: dict) -> bool:
+        if tags:
+            d_tags = set(t.lower() for t in d.get("tags", []))
+            d_text = f"{d.get('title', '')} {d.get('decision', '')}".lower()
+            if not any(t.lower() in d_tags or t.lower() in d_text for t in tags):
+                return False
+        if project:
+            p = project.lower()
+            entities = [e.lower() for e in d.get("entities", [])]
+            d_tags = [t.lower() for t in d.get("tags", [])]
+            d_projects = [pr.lower() for pr in d.get("projects", [])]
+            if p not in entities and p not in d_tags and p not in d_projects:
+                return False
+        if cutoff:
+            try:
+                ts = _parse_ts(d.get("timestamp", ""))
+                if ts < cutoff:
+                    return False
+            except (ValueError, TypeError):
+                return False
+        return True
+
+    # --- 1. Reversals ---
+    reversals = []
+    for d in decs:
+        if d.get("outcome") != "revised":
+            continue
+        if not _matches_filter(d):
+            continue
+        related = d.get("related_decisions", [])
+        replacement = None
+        for rid in related:
+            r = dec_by_id.get(rid)
+            if r and r.get("outcome") != "revised":
+                replacement = r
+                break
+        # If no non-revised related decision, take the first related
+        if replacement is None and related:
+            replacement = dec_by_id.get(related[0])
+        reversals.append(
+            {
+                "revised": {
+                    "id": d.get("id", ""),
+                    "title": d.get("title", "") or d.get("decision", ""),
+                    "timestamp": d.get("timestamp", ""),
+                    "tags": d.get("tags", []),
+                },
+                "replaced_by": {
+                    "id": replacement.get("id", ""),
+                    "title": replacement.get("title", "")
+                    or replacement.get("decision", ""),
+                    "timestamp": replacement.get("timestamp", ""),
+                    "outcome": replacement.get("outcome", ""),
+                }
+                if replacement
+                else None,
+            }
+        )
+
+    # --- 2. Volatile tags ---
+    tag_counts: Counter = Counter()
+    for r in reversals:
+        for t in r["revised"]["tags"]:
+            tag_counts[t] += 1
+    volatile_tags = [
+        {"tag": tag, "reversal_count": count} for tag, count in tag_counts.most_common()
+    ]
+
+    # --- 3. Revision chains ---
+    # Build adjacency from related_decisions, walk from revised decisions
+    adjacency: dict[str, set[str]] = {}
+    for d in decs:
+        did = d.get("id", "")
+        if not did:
+            continue
+        adjacency.setdefault(did, set())
+        for rel in d.get("related_decisions", []):
+            if rel:
+                adjacency.setdefault(did, set()).add(rel)
+                adjacency.setdefault(rel, set()).add(did)
+
+    # Find chains that contain at least one revised decision
+    revised_ids = {d.get("id") for d in decs if d.get("outcome") == "revised"}
+    visited: set[str] = set()
+    chains = []
+
+    for start in revised_ids:
+        if not start or start in visited:
+            continue
+        # BFS to find connected component
+        component: list[str] = []
+        queue = [start]
+        while queue:
+            current = queue.pop(0)
+            if current in visited:
+                continue
+            visited.add(current)
+            component.append(current)
+            for neighbor in adjacency.get(current, set()):
+                if neighbor not in visited:
+                    queue.append(neighbor)
+
+        if len(component) < 2:
+            continue
+
+        # Check filter match for any member
+        if tags or project or cutoff:
+            if not any(_matches_filter(dec_by_id.get(did, {})) for did in component):
+                continue
+
+        # Sort chain chronologically
+        def _sort_key(did: str) -> str:
+            return dec_by_id.get(did, {}).get("timestamp", "")
+
+        component.sort(key=_sort_key)
+
+        steps = []
+        for did in component:
+            d = dec_by_id.get(did, {})
+            steps.append(
+                {
+                    "id": did,
+                    "title": d.get("title", "") or d.get("decision", ""),
+                    "outcome": d.get("outcome", ""),
+                    "timestamp": d.get("timestamp", ""),
+                }
+            )
+        chains.append({"steps": steps, "length": len(steps)})
+
+    return {
+        "reversals": reversals,
+        "reversal_count": len(reversals),
+        "volatile_tags": volatile_tags,
+        "chains": chains,
+        "chain_count": len(chains),
+        "filters_applied": {
+            "tags": tags or [],
+            "project": project or "",
+            "since_days": since_days,
+        },
+    }
+
+
 def correlate(window_hours: int = 24) -> list[dict]:
     """Failures alongside journal entries within a time window.
 

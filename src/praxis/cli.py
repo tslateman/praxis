@@ -552,6 +552,64 @@ def cmd_undocumented(args):
         print('Fix: lore learn "<pattern>" --problem "what it solves"')
 
 
+def cmd_drift(args):
+    """Decision reversals over time."""
+    result = synthesis.drift(
+        tags=args.tags,
+        project=args.project,
+        since_days=args.since_days,
+    )
+
+    if args.json:
+        print(json.dumps(result, indent=2))
+        return
+
+    if result["reversal_count"] == 0 and result["chain_count"] == 0:
+        print("No decision reversals found.")
+        return
+
+    if result["reversals"]:
+        print("Reversals:")
+        for r in result["reversals"]:
+            rev = r["revised"]
+            ts = rev["timestamp"][:10]
+            print(f'  {rev["id"]}  {ts}  "{rev["title"]}"')
+            rep = r["replaced_by"]
+            if rep:
+                rep_ts = rep["timestamp"][:10]
+                print(
+                    f'    -> {rep["id"]}  {rep_ts}  "{rep["title"]}" ({rep["outcome"]})'
+                )
+            else:
+                print("    -> (no replacement linked)")
+
+    if result["volatile_tags"]:
+        print()
+        print("Volatile Tags:")
+        for vt in result["volatile_tags"]:
+            print(f"  {vt['tag']}: {vt['reversal_count']} reversals")
+
+    if result["chains"]:
+        print()
+        print("Revision Chains:")
+        for chain in result["chains"]:
+            steps = chain["steps"]
+            parts = []
+            for s in steps:
+                marker = "~" if s["outcome"] == "revised" else ""
+                parts.append(f"{marker}{s['id']}")
+            print(f"  {' -> '.join(parts)}")
+            for s in steps:
+                ts = s["timestamp"][:10]
+                outcome = f" ({s['outcome']})" if s["outcome"] else ""
+                print(f'    {s["id"]}  {ts}  "{s["title"]}"{outcome}')
+
+    print()
+    print(
+        f"Summary: {result['reversal_count']} reversals, {result['chain_count']} chains"
+    )
+
+
 def cmd_correlate(args):
     """Failures alongside nearby decisions."""
     results = synthesis.correlate(window_hours=args.window)
@@ -765,6 +823,15 @@ def main():
     p = sub.add_parser("undocumented", help="Decisions and patterns lacking rationale")
     p.add_argument("--json", action="store_true", help="Output raw JSON")
     p.set_defaults(func=cmd_undocumented)
+
+    p = sub.add_parser("drift", help="Decision reversals over time")
+    p.add_argument("--tags", nargs="+", help="Filter by tags")
+    p.add_argument("--project", help="Filter by project name")
+    p.add_argument(
+        "--since", type=int, dest="since_days", help="Days of recency (default: all)"
+    )
+    p.add_argument("--json", action="store_true", help="Output raw JSON")
+    p.set_defaults(func=cmd_drift)
 
     p = sub.add_parser("correlate", help="Failures alongside nearby decisions")
     p.add_argument("--window", type=int, default=24, help="Hours (default: 24)")

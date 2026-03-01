@@ -319,6 +319,152 @@ class TestCorrelate:
         assert narrow_total <= wide_total
 
 
+# --- drift() ---
+
+
+class TestDrift:
+    def test_returns_expected_keys(self, lore_dir):
+        result = synthesis.drift()
+        assert "reversals" in result
+        assert "reversal_count" in result
+        assert "volatile_tags" in result
+        assert "chains" in result
+        assert "chain_count" in result
+        assert "filters_applied" in result
+
+    def test_finds_revised_decision(self, lore_dir):
+        """dec-005 has outcome='revised' and should appear."""
+        result = synthesis.drift()
+        revised_ids = [r["revised"]["id"] for r in result["reversals"]]
+        assert "dec-005" in revised_ids
+
+    def test_reversal_count(self, lore_dir):
+        result = synthesis.drift()
+        assert result["reversal_count"] == 1  # dec-005
+
+    def test_volatile_tags_from_revised(self, lore_dir):
+        """dec-005 has tag 'storage', so storage should be volatile."""
+        result = synthesis.drift()
+        tag_names = [vt["tag"] for vt in result["volatile_tags"]]
+        assert "storage" in tag_names
+
+    def test_tag_filter_narrows(self, lore_dir):
+        all_result = synthesis.drift()
+        filtered = synthesis.drift(tags=["storage"])
+        assert filtered["reversal_count"] <= all_result["reversal_count"]
+
+    def test_tag_filter_excludes_unmatched(self, lore_dir):
+        result = synthesis.drift(tags=["nonexistent-tag-xyz"])
+        assert result["reversal_count"] == 0
+
+    def test_chains_link_related_decisions(self, lore_dir):
+        """dec-005 is revised. If it has related_decisions, those form a chain."""
+        # Add related_decisions to dec-005 pointing to dec-001
+        path = lore_dir / "journal" / "data" / "decisions.jsonl"
+        _write_jsonl(
+            path,
+            [
+                {
+                    "id": "dec-rev-a",
+                    "title": "Original storage plan",
+                    "outcome": "revised",
+                    "tags": ["storage"],
+                    "related_decisions": ["dec-rev-b"],
+                    "timestamp": _days_ago(10),
+                },
+                {
+                    "id": "dec-rev-b",
+                    "title": "Updated storage plan",
+                    "outcome": "accepted",
+                    "tags": ["storage"],
+                    "related_decisions": ["dec-rev-a"],
+                    "timestamp": _days_ago(5),
+                },
+            ],
+        )
+        lore.cache_clear()
+        result = synthesis.drift()
+        assert result["chain_count"] >= 1
+        # Chain should contain both decisions
+        chain_ids = set()
+        for chain in result["chains"]:
+            for step in chain["steps"]:
+                chain_ids.add(step["id"])
+        assert "dec-rev-a" in chain_ids
+        assert "dec-rev-b" in chain_ids
+
+    def test_chain_chronological_order(self, lore_dir):
+        """Chain steps are sorted oldest-first."""
+        path = lore_dir / "journal" / "data" / "decisions.jsonl"
+        _write_jsonl(
+            path,
+            [
+                {
+                    "id": "dec-old",
+                    "title": "First attempt",
+                    "outcome": "revised",
+                    "tags": ["api"],
+                    "related_decisions": ["dec-new"],
+                    "timestamp": _days_ago(20),
+                },
+                {
+                    "id": "dec-new",
+                    "title": "Second attempt",
+                    "outcome": "accepted",
+                    "tags": ["api"],
+                    "related_decisions": ["dec-old"],
+                    "timestamp": _days_ago(2),
+                },
+            ],
+        )
+        lore.cache_clear()
+        result = synthesis.drift()
+        for chain in result["chains"]:
+            timestamps = [s["timestamp"] for s in chain["steps"]]
+            assert timestamps == sorted(timestamps)
+
+    def test_since_days_filter(self, lore_dir):
+        result = synthesis.drift(since_days=1)
+        # dec-005 is 4 days old, should be excluded
+        assert result["reversal_count"] == 0
+
+    def test_empty_data(self, empty_lore_dir):
+        result = synthesis.drift()
+        assert result["reversal_count"] == 0
+        assert result["chain_count"] == 0
+        assert result["volatile_tags"] == []
+
+    def test_replacement_linked(self, lore_dir):
+        """When a revised decision has related_decisions, the replacement is found."""
+        path = lore_dir / "journal" / "data" / "decisions.jsonl"
+        _write_jsonl(
+            path,
+            [
+                {
+                    "id": "dec-X",
+                    "title": "Old approach",
+                    "outcome": "revised",
+                    "tags": ["infra"],
+                    "related_decisions": ["dec-Y"],
+                    "timestamp": _days_ago(10),
+                },
+                {
+                    "id": "dec-Y",
+                    "title": "New approach",
+                    "outcome": "accepted",
+                    "tags": ["infra"],
+                    "related_decisions": ["dec-X"],
+                    "timestamp": _days_ago(5),
+                },
+            ],
+        )
+        lore.cache_clear()
+        result = synthesis.drift()
+        reversal = next(r for r in result["reversals"] if r["revised"]["id"] == "dec-X")
+        assert reversal["replaced_by"] is not None
+        assert reversal["replaced_by"]["id"] == "dec-Y"
+
+
 # --- context() ---
 
 

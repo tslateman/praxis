@@ -35,6 +35,7 @@ from zero to productive.
 | `praxis blind-spots`  | Recurring failures without decisions            |
 | `praxis refinement`   | Decisions ripe for promotion to patterns        |
 | `praxis context`      | Filtered context brief for agent prompts        |
+| `praxis drift`        | Decision reversals over time                    |
 | `praxis stale`        | Observations aging without action               |
 | `praxis overlap`      | Command name conflicts across projects          |
 | `praxis complexity`   | Projects exceeding complexity thresholds        |

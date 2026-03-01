@@ -9,7 +9,7 @@ import json
 import subprocess
 import sys
 
-from praxis import synthesis, watchdog
+from praxis import fleet, synthesis, watchdog
 
 
 def parse_time(val: str) -> int:
@@ -582,6 +582,78 @@ def cmd_decide(args):
     subprocess.run(["lore", "remember", args.text])
 
 
+def cmd_fleet(args):
+    """Fleet status: agents, tasks, merge queue, violations."""
+    from collections import Counter
+
+    agents = fleet.agents()
+    tasks = fleet.active_tasks()
+    violations = fleet.invariant_violations()
+    expired = fleet.expired_leases()
+    queue = fleet.merge_queue()
+
+    if args.json:
+        print(
+            json.dumps(
+                {
+                    "agents": agents,
+                    "active_tasks": tasks,
+                    "merge_queue": queue,
+                    "violations": violations,
+                    "expired_leases": expired,
+                },
+                indent=2,
+            )
+        )
+        return
+
+    task_counts = Counter(t.get("status", "unknown") for t in tasks)
+
+    print(f"Agents: {len(agents)} active")
+    if agents:
+        for a in agents:
+            role = a.get("role", "?")
+            model = a.get("model", "?")
+            print(f"  {a.get('agent_id', '?')} [{role}] ({model})")
+
+    print()
+    if task_counts:
+        print("Tasks:")
+        for status, count in sorted(task_counts.items()):
+            print(f"  {status}: {count}")
+    else:
+        print("No active fleet tasks.")
+
+    if queue:
+        print()
+        print("Merge Queue:")
+        for t in queue:
+            branch = t.get("branch", "")
+            suffix = f" ({branch})" if branch else ""
+            tid = t.get("task_id", "?")
+            st = t.get("status")
+            title = t.get("title", "")
+            print(f"  {tid} [{st}] {title}{suffix}")
+
+    if violations:
+        print()
+        print(f"Violations ({len(violations)}):")
+        for v in violations:
+            code = v.get("code", "?")
+            msg = v.get("message", "")
+            subj = v.get("subject_id", "?")
+            print(f"  {code}: {msg} ({subj})")
+
+    if expired:
+        print()
+        print(f"Expired Leases ({len(expired)}):")
+        for e in expired:
+            mins = e.get("minutes_overdue", 0)
+            tid = e.get("task_id", "?")
+            agent = e.get("claimed_by", "?")
+            print(f"  {tid} claimed by {agent} ({mins:.0f}m overdue)")
+
+
 def main():
     parser = argparse.ArgumentParser(
         prog="praxis",
@@ -716,6 +788,12 @@ def main():
 
     p = sub.add_parser("watchdog-report", help="Summary of recent watchdog failures")
     p.set_defaults(func=cmd_watchdog_report)
+
+    # -- Fleet commands --
+
+    p = sub.add_parser("fleet", help="Fleet status: agents, tasks, merge queue")
+    p.add_argument("--json", action="store_true", help="Output raw JSON")
+    p.set_defaults(func=cmd_fleet)
 
     args = parser.parse_args()
 

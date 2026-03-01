@@ -21,7 +21,7 @@ import math
 from collections import Counter
 from datetime import datetime, timedelta, timezone
 
-from praxis import lore, spectrace
+from praxis import fleet, lore, spectrace
 
 
 def _parse_ts(iso_str: str) -> datetime:
@@ -54,6 +54,13 @@ def status() -> dict:
     tasks = spectrace.fetch_tasks()
     task_counts = Counter(t.get("status", "unknown") for t in tasks)
 
+    # Fleet data
+    fleet_tasks = fleet.active_tasks()
+    fleet_task_counts = Counter(t.get("status", "unknown") for t in fleet_tasks)
+    fleet_agents = fleet.agents()
+    fleet_violations = fleet.invariant_violations()
+    fleet_expired = fleet.expired_leases()
+
     # Recent failures (last 7 days)
     week_ago = _now() - timedelta(days=7)
     recent_failures = []
@@ -66,9 +73,14 @@ def status() -> dict:
             continue
 
     # Determine pulse
-    if len(recent_failures) > 5 or len(stale_obs) > 10:
+    if (
+        len(recent_failures) > 5
+        or len(stale_obs) > 10
+        or len(fleet_violations) > 0
+        or len(fleet_expired) > 0
+    ):
         pulse = "attention"
-    elif len(recent_failures) > 0 or len(stale_obs) > 0:
+    elif len(recent_failures) > 0 or len(stale_obs) > 0 or len(fleet_tasks) > 0:
         pulse = "active"
     else:
         pulse = "clear"
@@ -76,6 +88,12 @@ def status() -> dict:
     return {
         "active_goals": active,
         "tasks": dict(task_counts),
+        "fleet": {
+            "tasks": dict(fleet_task_counts),
+            "agents": len(fleet_agents),
+            "violations": len(fleet_violations),
+            "expired_leases": len(fleet_expired),
+        },
         "blockers": {
             "recent_failures": len(recent_failures),
             "stale_observations": len(stale_obs),
@@ -97,17 +115,36 @@ def next_work() -> list[dict]:
     in_progress = []
     unclaimed = []
     for t in tasks:
-        status = t.get("status")
+        st = t.get("status")
         item = {
             "type": "task",
             "id": t.get("external_id"),
             "name": t.get("title"),
-            "status": status,
+            "status": st,
         }
-        if status == "in_progress":
+        if st == "in_progress":
             in_progress.append(item)
-        elif status == "unclaimed":
+        elif st == "unclaimed":
             unclaimed.append(item)
+
+    # Fleet tasks
+    fleet_tasks = fleet.active_tasks()
+    fleet_in_progress = []
+    fleet_unclaimed = []
+    for t in fleet_tasks:
+        st = t.get("status")
+        item = {
+            "type": "fleet_task",
+            "id": t.get("task_id"),
+            "name": t.get("title"),
+            "status": st,
+            "claimed_by": t.get("claimed_by"),
+            "branch": t.get("branch"),
+        }
+        if st in ("claimed", "in_progress"):
+            fleet_in_progress.append(item)
+        elif st == "unclaimed":
+            fleet_unclaimed.append(item)
 
     goals_list = lore.active_goals()
     for g in goals_list:
@@ -123,7 +160,7 @@ def next_work() -> list[dict]:
 
     sorted_goals = sorted(goals_list, key=priority_key)
 
-    return in_progress + unclaimed + sorted_goals
+    return fleet_in_progress + in_progress + fleet_unclaimed + unclaimed + sorted_goals
 
 
 def context(
@@ -540,6 +577,12 @@ def health() -> dict:
     complexity_results = ecosystem_complexity()
     undoc_results = undocumented()
 
+    # Fleet health
+    fleet_violations = fleet.invariant_violations()
+    fleet_expired = fleet.expired_leases()
+    fleet_active = fleet.active_tasks()
+    fleet_failures = fleet.failures()
+
     # Determine status
     has_critical_triggers = any(t["count"] >= 5 for t in trigger_results)
     has_blind_spots = blind_spot_results["blind_spot_count"] > 0
@@ -553,8 +596,9 @@ def health() -> dict:
         + refinement_results["chain_count"]
         + refinement_results["aging_count"]
     )
+    has_fleet_violations = len(fleet_violations) > 0
 
-    if has_blind_spots or has_critical_triggers:
+    if has_blind_spots or has_critical_triggers or has_fleet_violations:
         status_val = "critical"
     elif (
         stale_results["stale_count"] > 0
@@ -563,6 +607,7 @@ def health() -> dict:
         or has_complexity
         or has_undocumented
         or refinement_total > 0
+        or len(fleet_expired) > 0
     ):
         status_val = "attention"
     else:
@@ -581,6 +626,12 @@ def health() -> dict:
             "undocumented_decisions": undoc_results["decision_count"],
             "undocumented_patterns": undoc_results["pattern_count"],
             "refinement_count": refinement_total,
+        },
+        "fleet": {
+            "active_tasks": len(fleet_active),
+            "violations": len(fleet_violations),
+            "expired_leases": len(fleet_expired),
+            "failures": len(fleet_failures),
         },
         "triggers": trigger_results,
         "stale_observations": stale_results["stale_observations"],

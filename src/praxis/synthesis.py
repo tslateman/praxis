@@ -671,6 +671,49 @@ def blockers_view() -> dict:
     }
 
 
+def impact_view(
+    base_ref: str = "HEAD~1",
+    head_ref: str = "HEAD",
+    projects: list | None = None,
+) -> dict:
+    """Blast radius across the ecosystem.
+
+    Assembles impact graph from spectrace-map.yaml, git co-change,
+    and contract snapshots. Returns changed files, blast radius,
+    and recommendations.
+    """
+    from praxis import impact
+
+    result = impact.build_graph(base_ref, head_ref, projects)
+
+    # Recommendations based on analysis
+    recommendations = []
+    blast = result.get("blast", {})
+    edges = result.get("edge_summary", {})
+
+    if blast.get("risk_level") in ("high", "critical"):
+        recommendations.append("High risk — review cross-project impact before merging")
+
+    if edges.get("inferred", 0) > edges.get("annotated", 0):
+        recommendations.append(
+            "More inferred than annotated edges"
+            " — run `spectrace specs map init` to confirm mappings"
+        )
+
+    cross_projects = blast.get("affected_projects", [])
+    if len(cross_projects) > 2:
+        recommendations.append(
+            f"Change touches {len(cross_projects)} projects — coordinate across teams"
+        )
+
+    if not edges.get("annotated") and not edges.get("contract"):
+        recommendations.append(
+            "No annotated or contract edges — add spectrace-map.yaml to projects"
+        )
+
+    return {**result, "recommendations": recommendations}
+
+
 def fleet_view() -> dict:
     """Fleet status synthesized by intervention severity.
 

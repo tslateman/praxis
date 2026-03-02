@@ -782,6 +782,58 @@ def cmd_decide(args):
     subprocess.run(["lore", "remember", args.text])
 
 
+def cmd_impact(args):
+    """Blast radius across the ecosystem."""
+    projects = args.projects if hasattr(args, "projects") and args.projects else None
+    result = synthesis.impact_view(args.base, args.head, projects)
+
+    if args.json:
+        print(json.dumps(result, indent=2))
+        return
+
+    blast = result["blast"]
+    risk = blast["risk_level"].upper()
+    score = blast["risk_score"]
+    print(f"Risk: {risk} ({score})")
+    print()
+
+    changed = result["changed_files"]
+    if changed:
+        total = sum(len(v) for v in changed.values())
+        print(f"Changed Files ({total}):")
+        for proj, files in sorted(changed.items()):
+            for f in files:
+                print(f"  [{proj}] {f}")
+        print()
+
+    reqs = blast["affected_requirements"]
+    if reqs:
+        print(f"Affected Requirements ({len(reqs)}):")
+        for r in reqs:
+            print(f"  {r}")
+        print()
+
+    modules = blast["affected_modules"]
+    if modules:
+        print(f"Affected Modules ({len(modules)}):")
+        for m in modules:
+            print(f"  {m}")
+        print()
+
+    edges = result["edge_summary"]
+    print(
+        f"Edges: {edges['annotated']} annotated, "
+        f"{edges['inferred']} inferred, {edges['contract']} contract"
+    )
+
+    recs = result.get("recommendations", [])
+    if recs:
+        print()
+        print("Recommendations:")
+        for r in recs:
+            print(f"  - {r}")
+
+
 def cmd_fleet(args):
     """Fleet status synthesized by intervention severity."""
     result = synthesis.fleet_view()
@@ -1033,6 +1085,15 @@ def main():
 
     p = sub.add_parser("watchdog-report", help="Summary of recent watchdog failures")
     p.set_defaults(func=cmd_watchdog_report)
+
+    # -- Impact commands --
+
+    p = sub.add_parser("impact", help="Blast radius across ecosystem")
+    p.add_argument("--base", default="HEAD~1", help="Base ref (default: HEAD~1)")
+    p.add_argument("--head", default="HEAD", help="Head ref (default: HEAD)")
+    p.add_argument("--projects", nargs="+", help="Filter to specific projects")
+    p.add_argument("--json", action="store_true", help="Output raw JSON")
+    p.set_defaults(func=cmd_impact)
 
     # -- Fleet commands --
 

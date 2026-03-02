@@ -15,7 +15,7 @@ def fleet_db(tmp_path, monkeypatch):
     conn = sqlite3.connect(str(db_path))
 
     # Read and execute the schema
-    schema_path = Path.home() / "dev/fleets/src/schema/fleet.sql"
+    schema_path = Path.home() / "dev/shipyard/src/schema/fleet.sql"
     conn.executescript(schema_path.read_text())
 
     # Insert test data

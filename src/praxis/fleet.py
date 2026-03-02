@@ -3,14 +3,16 @@
 Praxis reads directly from fleet.db SQLite. Returns empty results
 when the database doesn't exist.
 
-DB location: FLEET_DB env var or ~/dev/fleets/fleet.db
+DB location: FLEET_DB env var or ~/dev/shipyard/fleet.db
 """
 
 import os
 import sqlite3
 from pathlib import Path
 
-FLEET_DB_PATH = Path(os.environ.get("FLEET_DB", Path.home() / "dev/fleets/fleet.db"))
+FLEET_DB_PATH = Path(
+    os.environ.get("FLEET_DB", Path.home() / "dev/shipyard/fleet.db")
+)
 
 
 def _query(sql: str, params: tuple = ()) -> list[dict]:

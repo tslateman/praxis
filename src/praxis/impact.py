@@ -4,7 +4,7 @@ Assembles an in-memory graph from spectrace-map.yaml files,
 git co-change inference, and contract snapshots. No Django dependency.
 
 Project roots from PRAXIS_PROJECT_ROOTS env (colon-separated key=path pairs)
-or defaults to ~/dev/{lore,praxis,geordi,forge/spec-trace,fleets}.
+or defaults to ~/dev/{lore,praxis,geordi,forge/spec-trace,shipyard}.
 """
 
 import json
@@ -27,7 +27,7 @@ _DEFAULT_ROOTS = {
     "praxis": Path.home() / "dev/praxis",
     "geordi": Path.home() / "dev/geordi",
     "spectrace": Path.home() / "dev/forge/spec-trace",
-    "fleets": Path.home() / "dev/fleets",
+    "shipyard": Path.home() / "dev/shipyard",
 }
 
 GIT_REF_PATTERN = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9._/:\-~^@{}]*$")

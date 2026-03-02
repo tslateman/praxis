@@ -1120,3 +1120,260 @@ class TestFleetView:
         result = synthesis.fleet_view()
         assert len(result["token_summary"]) == 1
         assert result["token_summary"][0]["total_tokens"] == 5000
+
+
+# --- Integration Edge Cases ---
+
+
+class TestDriftMultiHop:
+    """Multi-hop revision chains: A→B→C where A and B are revised."""
+
+    def test_three_node_chain(self, lore_dir):
+        """BFS finds all three nodes in a 3-step chain."""
+        path = lore_dir / "journal" / "data" / "decisions.jsonl"
+        _write_jsonl(
+            path,
+            [
+                {
+                    "id": "dec-chain-a",
+                    "title": "First storage approach",
+                    "outcome": "revised",
+                    "tags": ["chain-test"],
+                    "related_decisions": ["dec-chain-b"],
+                    "timestamp": _days_ago(15),
+                },
+                {
+                    "id": "dec-chain-b",
+                    "title": "Second storage approach",
+                    "outcome": "revised",
+                    "tags": ["chain-test"],
+                    "related_decisions": ["dec-chain-a", "dec-chain-c"],
+                    "timestamp": _days_ago(10),
+                },
+                {
+                    "id": "dec-chain-c",
+                    "title": "Final storage approach",
+                    "outcome": "accepted",
+                    "tags": ["chain-test"],
+                    "related_decisions": ["dec-chain-b"],
+                    "timestamp": _days_ago(5),
+                },
+            ],
+        )
+        lore.cache_clear()
+        result = synthesis.drift()
+        # Find the chain containing all three
+        found = None
+        for chain in result["chains"]:
+            ids = {s["id"] for s in chain["steps"]}
+            if {"dec-chain-a", "dec-chain-b", "dec-chain-c"} <= ids:
+                found = chain
+                break
+        assert found is not None, "3-node chain not found"
+        assert found["length"] == 3
+
+    def test_chain_chronological_order(self, lore_dir):
+        """Steps within a 3-node chain are sorted oldest-first."""
+        path = lore_dir / "journal" / "data" / "decisions.jsonl"
+        _write_jsonl(
+            path,
+            [
+                {
+                    "id": "dec-mh-a",
+                    "title": "Step 1",
+                    "outcome": "revised",
+                    "tags": ["multi"],
+                    "related_decisions": ["dec-mh-b"],
+                    "timestamp": _days_ago(20),
+                },
+                {
+                    "id": "dec-mh-b",
+                    "title": "Step 2",
+                    "outcome": "revised",
+                    "tags": ["multi"],
+                    "related_decisions": ["dec-mh-a", "dec-mh-c"],
+                    "timestamp": _days_ago(10),
+                },
+                {
+                    "id": "dec-mh-c",
+                    "title": "Step 3",
+                    "outcome": "accepted",
+                    "tags": ["multi"],
+                    "related_decisions": ["dec-mh-b"],
+                    "timestamp": _days_ago(1),
+                },
+            ],
+        )
+        lore.cache_clear()
+        result = synthesis.drift()
+        for chain in result["chains"]:
+            ids = {s["id"] for s in chain["steps"]}
+            if "dec-mh-a" in ids:
+                timestamps = [s["timestamp"] for s in chain["steps"]]
+                assert timestamps == sorted(timestamps)
+                break
+
+    def test_reversal_count_multi_hop(self, lore_dir):
+        """Two revised decisions in the chain produce two reversals."""
+        path = lore_dir / "journal" / "data" / "decisions.jsonl"
+        _write_jsonl(
+            path,
+            [
+                {
+                    "id": "dec-r1",
+                    "title": "Attempt 1",
+                    "outcome": "revised",
+                    "tags": ["multi-rev"],
+                    "related_decisions": ["dec-r2"],
+                    "timestamp": _days_ago(15),
+                },
+                {
+                    "id": "dec-r2",
+                    "title": "Attempt 2",
+                    "outcome": "revised",
+                    "tags": ["multi-rev"],
+                    "related_decisions": ["dec-r1", "dec-r3"],
+                    "timestamp": _days_ago(10),
+                },
+                {
+                    "id": "dec-r3",
+                    "title": "Final attempt",
+                    "outcome": "accepted",
+                    "tags": ["multi-rev"],
+                    "related_decisions": ["dec-r2"],
+                    "timestamp": _days_ago(5),
+                },
+            ],
+        )
+        lore.cache_clear()
+        result = synthesis.drift()
+        assert result["reversal_count"] == 2
+        revised_ids = {r["revised"]["id"] for r in result["reversals"]}
+        assert "dec-r1" in revised_ids
+        assert "dec-r2" in revised_ids
+
+
+class TestVerifyUnavailablePropagation:
+    """verify() → 'unavailable' propagates cleanly through composite views."""
+
+    def test_status_verification_unavailable(self, lore_dir):
+        result = synthesis.status()
+        assert result["verification"] == "unavailable"
+
+    def test_health_verification_unavailable(self, lore_dir):
+        result = synthesis.health()
+        assert result["verification"]["status"] == "unavailable"
+
+    def test_blockers_verification_none(self, lore_dir):
+        result = synthesis.blockers_view()
+        assert result["verification"] is None
+
+    def test_context_ground_truth_none(self, lore_dir):
+        result = synthesis.context(budget=50000)
+        assert result["ground_truth"] is None
+
+    def test_pulse_not_escalated_by_unavailable(self, empty_lore_dir):
+        """Unavailable verification alone doesn't push pulse above 'clear'."""
+        result = synthesis.status()
+        assert result["pulse"] == "clear"
+
+
+class TestContentionAndDriftOverlap:
+    """Decisions sharing a tag with divergent outcomes produce both
+    drift reversals AND context contentions."""
+
+    def test_drift_and_contention_both_fire(self, lore_dir):
+        path = lore_dir / "journal" / "data" / "decisions.jsonl"
+        _write_jsonl(
+            path,
+            [
+                {
+                    "id": "dec-overlap-a",
+                    "title": "Use REST API",
+                    "outcome": "revised",
+                    "tags": ["api-design"],
+                    "related_decisions": ["dec-overlap-b"],
+                    "timestamp": _days_ago(10),
+                },
+                {
+                    "id": "dec-overlap-b",
+                    "title": "Use GraphQL instead",
+                    "outcome": "accepted",
+                    "tags": ["api-design"],
+                    "related_decisions": ["dec-overlap-a"],
+                    "timestamp": _days_ago(5),
+                },
+            ],
+        )
+        lore.cache_clear()
+
+        # Drift should find a reversal
+        drift_result = synthesis.drift()
+        revised_ids = {r["revised"]["id"] for r in drift_result["reversals"]}
+        assert "dec-overlap-a" in revised_ids
+
+        # Context should find a contention (revised vs accepted on same tag)
+        ctx_result = synthesis.context(budget=50000)
+        contentions = ctx_result["contentions"]
+        overlap_contention = [
+            c
+            for c in contentions
+            if c["tag"] == "api-design"
+            and {c["a"], c["b"]} == {"dec-overlap-a", "dec-overlap-b"}
+        ]
+        assert len(overlap_contention) == 1
+
+    def test_contention_outcomes_format(self, lore_dir):
+        path = lore_dir / "journal" / "data" / "decisions.jsonl"
+        _write_jsonl(
+            path,
+            [
+                {
+                    "id": "dec-fmt-a",
+                    "title": "Old way",
+                    "outcome": "revised",
+                    "tags": ["fmt-test"],
+                    "timestamp": _days_ago(10),
+                },
+                {
+                    "id": "dec-fmt-b",
+                    "title": "New way",
+                    "outcome": "accepted",
+                    "tags": ["fmt-test"],
+                    "timestamp": _days_ago(5),
+                },
+            ],
+        )
+        lore.cache_clear()
+        ctx = synthesis.context(budget=50000)
+        match = [c for c in ctx["contentions"] if c["tag"] == "fmt-test"]
+        assert len(match) == 1
+        assert "revised" in match[0]["outcomes"]
+        assert "accepted" in match[0]["outcomes"]
+
+    def test_no_contention_same_outcome(self, lore_dir):
+        """Two decisions with the same outcome on the same tag: no contention."""
+        path = lore_dir / "journal" / "data" / "decisions.jsonl"
+        _write_jsonl(
+            path,
+            [
+                {
+                    "id": "dec-same-a",
+                    "title": "Decision A",
+                    "outcome": "accepted",
+                    "tags": ["harmony"],
+                    "timestamp": _days_ago(10),
+                },
+                {
+                    "id": "dec-same-b",
+                    "title": "Decision B",
+                    "outcome": "accepted",
+                    "tags": ["harmony"],
+                    "timestamp": _days_ago(5),
+                },
+            ],
+        )
+        lore.cache_clear()
+        ctx = synthesis.context(budget=50000)
+        match = [c for c in ctx["contentions"] if c["tag"] == "harmony"]
+        assert len(match) == 0

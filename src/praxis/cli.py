@@ -9,6 +9,7 @@ import json
 import subprocess
 import sys
 
+from praxis import emit as emit_module
 from praxis import synthesis, watchdog
 
 
@@ -834,6 +835,48 @@ def cmd_impact(args):
             print(f"  - {r}")
 
 
+def cmd_emit(args):
+    """Emit fleet dispatch payload to Blueprint inbox."""
+    if args.from_triggers:
+        trigger_results = synthesis.triggers(threshold=args.threshold)
+        paths = emit_module.emit_from_triggers(
+            trigger_results, threshold=args.threshold
+        )
+        if not paths:
+            print("No triggers above threshold. Nothing emitted.")
+            return
+        for p in paths:
+            print(f"Emitted: {p}")
+        return
+
+    if not args.team:
+        print("Error: --team is required when not using --from-triggers")
+        return
+
+    # Build tasks from repeated --task/--agent-type pairs
+    if not args.task or not args.agent_type:
+        print("Error: at least one --task and --agent-type pair required")
+        return
+
+    if len(args.task) != len(args.agent_type):
+        print("Error: --task and --agent-type must be paired (same count)")
+        return
+
+    tasks = []
+    for i, (title, atype) in enumerate(zip(args.task, args.agent_type)):
+        name = title.lower().replace(" ", "-")[:30]
+        tasks.append(
+            {
+                "name": f"task-{i}-{name}",
+                "title": title,
+                "agent_type": atype,
+            }
+        )
+
+    path = emit_module.emit_payload(args.team, tasks, runtime=args.runtime)
+    print(f"Emitted: {path}")
+
+
 def cmd_fleet(args):
     """Fleet status synthesized by intervention severity."""
     result = synthesis.fleet_view()
@@ -1096,6 +1139,25 @@ def main():
     p.set_defaults(func=cmd_impact)
 
     # -- Fleet commands --
+
+    p = sub.add_parser("emit", help="Emit fleet dispatch payload to Blueprint inbox")
+    p.add_argument("--team", help="Shipyard team name")
+    p.add_argument("--task", action="append", help="Task title (repeatable)")
+    p.add_argument(
+        "--agent-type", action="append", help="Agent type for each task (repeatable)"
+    )
+    p.add_argument(
+        "--runtime", default="local", help="Shipyard runtime (default: local)"
+    )
+    p.add_argument(
+        "--from-triggers",
+        action="store_true",
+        help="Generate from Rule of Three signals",
+    )
+    p.add_argument(
+        "--threshold", type=int, default=5, help="Trigger count threshold (default: 5)"
+    )
+    p.set_defaults(func=cmd_emit)
 
     p = sub.add_parser("fleet", help="Fleet status: agents, tasks, merge queue")
     p.add_argument("--json", action="store_true", help="Output raw JSON")

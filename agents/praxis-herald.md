@@ -27,7 +27,7 @@ the work begins.
 
 3. Synthesize a 5-10 line briefing covering:
    - **Ecosystem status** (healthy/attention/critical) with top signals
-   - **Active blockers** if any (triggers, blind spots, stale observations)
+   - **Active blockers** if any (recurring failures, blind spots, stale observations)
    - **Top 3 next actions** from the work queue
    - **Friction hotspots** if any
 

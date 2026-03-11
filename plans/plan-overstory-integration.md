@@ -25,13 +25,13 @@ state and memory in sync.
 
 ## Lifecycle Mapping
 
-| SpecTrace Status | Overstory Event | Trigger |
-| --- | --- | --- |
-| UNCLAIMED → CLAIMED | `ov sling <task-id>` | Agent spawn |
-| CLAIMED → IN_PROGRESS | `ov agent start` | Work begins |
-| IN_PROGRESS → READY_FOR_REVIEW | `ov agent submit` | Work done |
-| READY_FOR_REVIEW → APPROVED | Reviewer approves | Review step |
-| APPROVED → MERGED | `ov merge` | Merge completed |
+| SpecTrace Status               | Overstory Event      | Trigger         |
+| ------------------------------ | -------------------- | --------------- |
+| UNCLAIMED → CLAIMED            | `ov sling <task-id>` | Agent spawn     |
+| CLAIMED → IN_PROGRESS          | `ov agent start`     | Work begins     |
+| IN_PROGRESS → READY_FOR_REVIEW | `ov agent submit`    | Work done       |
+| READY_FOR_REVIEW → APPROVED    | Reviewer approves    | Review step     |
+| APPROVED → MERGED              | `ov merge`           | Merge completed |
 
 ## Required Hooks (MVP)
 
@@ -98,7 +98,7 @@ spec_ref: <link or path>
 - SpecTrace: authoritative task state + review workflow.
 - Overstory: execution, concurrency, and merge automation.
 - Lore: durable memory of decisions and failures.
-- Praxis: synthesis view (queue, health, blockers, watchdog).
+- Praxis: synthesis view (queue, health, blockers).
 
 ## Failure Modes
 

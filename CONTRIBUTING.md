@@ -60,7 +60,6 @@ python -m pytest
 
 # Verify commands produce output
 bin/praxis status
-bin/praxis triggers
 ```
 
 ## Pull Requests

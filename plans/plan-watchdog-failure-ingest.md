@@ -1,3 +1,5 @@
+> **Superseded.** Watchdog and triggers removed from Praxis — failure detection is now Reck's responsibility.
+
 Status: Completed
 
 # Plan: Watchdog Failure Ingest

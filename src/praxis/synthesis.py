@@ -6,7 +6,7 @@ Combines intent, failures, inbox, journal, and patterns into views that answer:
 - blockers: What's in the way?
 - health: Ecosystem pulse (failures + hygiene)
 - verify: Ground-truth verification (code matches record)
-- triggers: Recurring failure types
+- recurring failures: Failure type summary
 - friction: Project boundary issues
 - blind_spots: Failures without decisions
 - stale: Observations aging without action
@@ -780,7 +780,7 @@ def fleet_view() -> dict:
 def health() -> dict:
     """Single-page ecosystem health summary.
 
-    Aggregates: failure count, triggers, stale observations, blind spots,
+    Aggregates: failure count, recurring failures, stale observations, blind spots,
     friction hotspots, command overlap, complexity warnings, undocumented items.
     Returns status indicator (healthy/attention/critical).
     """
@@ -796,7 +796,7 @@ def health() -> dict:
         except (ValueError, TypeError):
             continue
 
-    trigger_results = triggers()
+    recurring = _failure_type_summary(fails)
     stale_results = stale()
     blind_spot_results = blind_spots()
     friction_results = friction()
@@ -818,7 +818,7 @@ def health() -> dict:
     verification_status = v["status"]
 
     # Determine status
-    has_critical_triggers = any(t["count"] >= 5 for t in trigger_results)
+    has_critical_recurring = any(t["count"] >= 5 for t in recurring)
     has_blind_spots = blind_spot_results["blind_spot_count"] > 0
     has_overlap = len(overlap_results) > 0
     has_complexity = len(complexity_results) > 0
@@ -834,14 +834,14 @@ def health() -> dict:
 
     if (
         has_blind_spots
-        or has_critical_triggers
+        or has_critical_recurring
         or has_fleet_violations
         or verification_status == "drifted"
     ):
         status_val = "critical"
     elif (
         stale_results["stale_count"] > 0
-        or len(trigger_results) > 0
+        or len(recurring) > 0
         or has_overlap
         or has_complexity
         or has_undocumented
@@ -857,7 +857,7 @@ def health() -> dict:
         "summary": {
             "total_failures": len(fails),
             "recent_failures": len(recent),
-            "trigger_count": len(trigger_results),
+            "recurring_failure_count": len(recurring),
             "stale_count": stale_results["stale_count"],
             "blind_spot_count": blind_spot_results["blind_spot_count"],
             "friction_boundaries": len(friction_results),
@@ -874,7 +874,7 @@ def health() -> dict:
             "failures": len(fleet_failures),
         },
         "verification": v,
-        "triggers": trigger_results,
+        "recurring_failures": recurring,
         "stale_signals": stale_results["stale_signals"],
         "blind_spots": blind_spot_results["orphaned_failures"],
         "friction": friction_results,
@@ -886,13 +886,8 @@ def health() -> dict:
     }
 
 
-def triggers(threshold: int = 3) -> list[dict]:
-    """Error types that hit the Rule of Three.
-
-    When an error type recurs >= threshold times, it signals a
-    systemic issue worth addressing.
-    """
-    fails = lore.failures()
+def _failure_type_summary(fails: list[dict], threshold: int = 3) -> list[dict]:
+    """Summarize failure types recurring above threshold."""
     by_type: dict[str, list[dict]] = {}
 
     for f in fails:

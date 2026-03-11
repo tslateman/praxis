@@ -15,7 +15,7 @@ Lore (intent)                spec-trace (verification)
               Praxis (synthesis)
                    │
             status, next, blockers,
-            health, triggers
+            health, context
 ```
 
 Praxis reads from Lore's memory (intent, failures, inbox, journal, patterns) and synthesizes actionable views. It owns no storage — Lore owns all writes.
@@ -51,23 +51,10 @@ export PATH="$HOME/dev/praxis/bin:$PATH"
 
 | Command              | Description                           |
 | -------------------- | ------------------------------------- |
-| `praxis triggers`    | Error types hitting Rule of Three     |
 | `praxis friction`    | Failures mapped to project boundaries |
 | `praxis blind-spots` | Recurring failures without decisions  |
 | `praxis stale`       | Observations aging without action     |
 | `praxis correlate`   | Failures alongside nearby decisions   |
-
-### Watchdog (Tier 0 Monitoring)
-
-| Command                   | Description                                    |
-| ------------------------- | ---------------------------------------------- |
-| `praxis watchdog`         | Run mechanical failure ingest on a command     |
-| `praxis watchdog-report`  | Show recent watchdog failure summaries         |
-
-Example:
-```bash
-praxis watchdog --cmd "make test" --project praxis --window 10m --threshold 3
-```
 
 ### Delegation (writes go to Lore)
 

@@ -18,23 +18,6 @@ def _ns(**kwargs):
     return argparse.Namespace(**defaults)
 
 
-# --- parse_time() ---
-
-
-class TestParseTime:
-    def test_seconds(self):
-        assert cli.parse_time("30s") == 30
-
-    def test_minutes(self):
-        assert cli.parse_time("10m") == 600
-
-    def test_hours(self):
-        assert cli.parse_time("2h") == 7200
-
-    def test_bare_int(self):
-        assert cli.parse_time("45") == 45
-
-
 # --- cmd_status ---
 
 
@@ -143,27 +126,6 @@ class TestCmdVerify:
         cli.cmd_verify(_ns())
         out = capsys.readouterr().out
         assert "UNAVAILABLE" in out
-
-
-# --- cmd_triggers ---
-
-
-class TestCmdTriggers:
-    def test_produces_output(self, lore_dir, capsys):
-        cli.cmd_triggers(_ns(threshold=3))
-        out = capsys.readouterr().out
-        assert "Timeout" in out
-
-    def test_json_mode(self, lore_dir, capsys):
-        cli.cmd_triggers(_ns(json=True, threshold=3))
-        out = capsys.readouterr().out
-        data = json.loads(out)
-        assert isinstance(data, list)
-
-    def test_empty_data(self, empty_lore_dir, capsys):
-        cli.cmd_triggers(_ns(threshold=3))
-        out = capsys.readouterr().out
-        assert "No error types" in out
 
 
 # --- cmd_stale ---

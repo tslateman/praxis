@@ -10,9 +10,7 @@ import os
 import sqlite3
 from pathlib import Path
 
-FLEET_DB_PATH = Path(
-    os.environ.get("FLEET_DB", Path.home() / "dev/shipyard/fleet.db")
-)
+FLEET_DB_PATH = Path(os.environ.get("FLEET_DB", Path.home() / "dev/shipyard/fleet.db"))
 
 
 def _query(sql: str, params: tuple = ()) -> list[dict]:

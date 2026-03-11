@@ -155,28 +155,6 @@ class TestBlockersView:
         assert result["stale"]["count"] == 0
 
 
-# --- triggers() ---
-
-
-class TestTriggers:
-    def test_finds_timeout_trigger(self, lore_dir):
-        result = synthesis.triggers(threshold=3)
-        types = [t["error_type"] for t in result]
-        assert "Timeout" in types
-
-    def test_threshold_filters(self, lore_dir):
-        # Only Timeout has 3+ occurrences in fixtures
-        result = synthesis.triggers(threshold=3)
-        assert all(t["count"] >= 3 for t in result)
-
-    def test_higher_threshold_excludes(self, lore_dir):
-        result = synthesis.triggers(threshold=10)
-        assert result == []
-
-    def test_empty_data(self, empty_lore_dir):
-        assert synthesis.triggers() == []
-
-
 # --- stale() ---
 
 
@@ -682,7 +660,7 @@ class TestHealth:
         result = synthesis.health()
         assert "summary" in result
         assert "status" in result
-        assert "triggers" in result
+        assert "recurring_failures" in result
         assert "stale_signals" in result
         assert "blind_spots" in result
         assert "friction" in result

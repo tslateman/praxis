@@ -10,37 +10,7 @@ import subprocess
 import sys
 
 from praxis import emit as emit_module
-from praxis import synthesis, watchdog
-
-
-def parse_time(val: str) -> int:
-    """Parse time string like 10m, 5s to seconds."""
-    if val.endswith("m"):
-        return int(val[:-1]) * 60
-    if val.endswith("h"):
-        return int(val[:-1]) * 3600
-    if val.endswith("s"):
-        return int(val[:-1])
-    return int(val)
-
-
-def cmd_watchdog(args):
-    """Run watchdog to monitor command failures."""
-    window_sec = parse_time(args.window)
-    interval_sec = parse_time(args.interval)
-
-    watchdog.run_watchdog(
-        cmd=args.cmd,
-        project=args.project,
-        window_sec=window_sec,
-        threshold=args.threshold,
-        interval_sec=interval_sec,
-    )
-
-
-def cmd_watchdog_report(args):
-    """Summary of recent watchdog failures."""
-    watchdog.report_status()
+from praxis import synthesis
 
 
 def cmd_status(args):
@@ -167,7 +137,9 @@ def cmd_health(args):
         f"  Failures: {summary['total_failures']} total, "
         f"{summary['recent_failures']} recent (7 days)"
     )
-    print(f"  Triggers: {summary['trigger_count']} error types hitting threshold")
+    print(
+        f"  Recurring: {summary['recurring_failure_count']} error types above threshold"
+    )
     print(f"  Stale: {summary['stale_count']} signals aging without action")
     print(f"  Blind spots: {summary['blind_spot_count']}")
     print(f"  Friction: {summary['friction_boundaries']} project boundaries")
@@ -179,10 +151,10 @@ def cmd_health(args):
     )
     print(f"  Refinement: {summary['refinement_count']} opportunities")
 
-    if result["triggers"]:
+    if result["recurring_failures"]:
         print()
-        print("Triggers:")
-        for t in result["triggers"]:
+        print("Recurring Failures:")
+        for t in result["recurring_failures"]:
             print(f"  {t['error_type']}: {t['count']} failures")
 
     if result["stale_signals"]:
@@ -343,22 +315,6 @@ def cmd_verify(args):
         print("Integration Risks:")
         for r in integration:
             print(f"  [{r['level']}] {r['task_a']} <-> {r['task_b']} ({r['reason']})")
-
-
-def cmd_triggers(args):
-    """Error types hitting Rule of Three."""
-    results = synthesis.triggers(threshold=args.threshold)
-
-    if args.json:
-        print(json.dumps(results, indent=2))
-        return
-
-    if not results:
-        print("No error types have hit the threshold.")
-        return
-
-    for t in results:
-        print(f"  {t['error_type']}: {t['count']} failures")
 
 
 def cmd_stale(args):
@@ -837,20 +793,8 @@ def cmd_impact(args):
 
 def cmd_emit(args):
     """Emit fleet dispatch payload to Blueprint inbox."""
-    if args.from_triggers:
-        trigger_results = synthesis.triggers(threshold=args.threshold)
-        paths = emit_module.emit_from_triggers(
-            trigger_results, threshold=args.threshold
-        )
-        if not paths:
-            print("No triggers above threshold. Nothing emitted.")
-            return
-        for p in paths:
-            print(f"Emitted: {p}")
-        return
-
     if not args.team:
-        print("Error: --team is required when not using --from-triggers")
+        print("Error: --team is required")
         return
 
     # Build tasks from repeated --task/--agent-type pairs
@@ -1025,13 +969,6 @@ def main():
 
     # -- Analysis commands --
 
-    p = sub.add_parser("triggers", help="Error types hitting Rule of Three")
-    p.add_argument(
-        "--threshold", type=int, default=3, help="Trigger count (default: 3)"
-    )
-    p.add_argument("--json", action="store_true", help="Output raw JSON")
-    p.set_defaults(func=cmd_triggers)
-
     p = sub.add_parser("stale", help="Signals aging without action")
     p.add_argument("--days", type=int, default=7, help="Age threshold (default: 7)")
     p.add_argument("--json", action="store_true", help="Output raw JSON")
@@ -1114,21 +1051,6 @@ def main():
     p.add_argument("text", help="Decision text")
     p.set_defaults(func=cmd_decide)
 
-    # -- Watchdog commands --
-
-    p = sub.add_parser("watchdog", help="Run watchdog to monitor command failures")
-    p.add_argument("--cmd", required=True, help="Command to run")
-    p.add_argument("--project", required=True, help="Project name")
-    p.add_argument("--window", default="10m", help="Time window (e.g. 10m, 600s)")
-    p.add_argument(
-        "--threshold", type=int, default=3, help="Failures required to trigger"
-    )
-    p.add_argument("--interval", default="5m", help="Interval between runs")
-    p.set_defaults(func=cmd_watchdog)
-
-    p = sub.add_parser("watchdog-report", help="Summary of recent watchdog failures")
-    p.set_defaults(func=cmd_watchdog_report)
-
     # -- Impact commands --
 
     p = sub.add_parser("impact", help="Blast radius across ecosystem")
@@ -1148,14 +1070,6 @@ def main():
     )
     p.add_argument(
         "--runtime", default="local", help="Shipyard runtime (default: local)"
-    )
-    p.add_argument(
-        "--from-triggers",
-        action="store_true",
-        help="Generate from Rule of Three signals",
-    )
-    p.add_argument(
-        "--threshold", type=int, default=5, help="Trigger count threshold (default: 5)"
     )
     p.set_defaults(func=cmd_emit)
 

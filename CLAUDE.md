@@ -31,7 +31,6 @@ from zero to productive.
 | `praxis blockers`     | Failures, stale items, friction points          |
 | `praxis health`       | Single-page ecosystem summary                   |
 | `praxis impact`       | Blast radius across ecosystem                   |
-| `praxis triggers`     | Error types hitting Rule of Three               |
 | `praxis friction`     | Failures at project boundaries                  |
 | `praxis blind-spots`  | Recurring failures without decisions            |
 | `praxis refinement`   | Decisions ripe for promotion to patterns        |

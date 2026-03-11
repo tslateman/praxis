@@ -68,101 +68,15 @@ class TestEmitPayload:
 
 
 # ---------------------------------------------------------------------------
-# emit_from_triggers
-# ---------------------------------------------------------------------------
-
-
-class TestEmitFromTriggers:
-    def test_no_triggers_above_threshold_returns_empty(self, tmp_path, monkeypatch):
-        monkeypatch.setattr(emit, "INBOX_DIR", tmp_path)
-        triggers = [{"error_type": "ImportError", "count": 2, "projects": ["foo"]}]
-        paths = emit.emit_from_triggers(triggers, threshold=5)
-
-        assert paths == []
-        assert list(tmp_path.iterdir()) == []
-
-    def test_one_trigger_above_threshold(self, tmp_path, monkeypatch):
-        monkeypatch.setattr(emit, "INBOX_DIR", tmp_path)
-        triggers = [{"error_type": "ImportError", "count": 7, "projects": ["lore"]}]
-        paths = emit.emit_from_triggers(triggers, threshold=5)
-
-        assert len(paths) == 1
-        assert paths[0].exists()
-        content = yaml.safe_load(paths[0].read_text())
-        assert content["team"] == "fix-importerror"
-        assert content["tasks"][0]["title"] == "Fix recurring ImportError in lore"
-        assert content["tasks"][0]["agent_type"] == "builder"
-        assert content["tasks"][0]["scope_in"] == ["lore/**"]
-
-    def test_two_triggers_above_threshold(self, tmp_path, monkeypatch):
-        monkeypatch.setattr(emit, "INBOX_DIR", tmp_path)
-        triggers = [
-            {"error_type": "ImportError", "count": 6, "projects": ["lore"]},
-            {"error_type": "KeyError", "count": 10, "projects": ["praxis"]},
-        ]
-        paths = emit.emit_from_triggers(triggers, threshold=5)
-
-        assert len(paths) == 2
-        teams = {yaml.safe_load(p.read_text())["team"] for p in paths}
-        assert teams == {"fix-importerror", "fix-keyerror"}
-
-    def test_trigger_below_threshold_skipped(self, tmp_path, monkeypatch):
-        monkeypatch.setattr(emit, "INBOX_DIR", tmp_path)
-        triggers = [
-            {"error_type": "ImportError", "count": 4, "projects": ["lore"]},
-            {"error_type": "KeyError", "count": 10, "projects": ["praxis"]},
-        ]
-        paths = emit.emit_from_triggers(triggers, threshold=5)
-
-        assert len(paths) == 1
-        content = yaml.safe_load(paths[0].read_text())
-        assert content["team"] == "fix-keyerror"
-
-    def test_trigger_with_no_projects_uses_unknown(self, tmp_path, monkeypatch):
-        monkeypatch.setattr(emit, "INBOX_DIR", tmp_path)
-        triggers = [{"error_type": "RuntimeError", "count": 8, "projects": []}]
-        paths = emit.emit_from_triggers(triggers, threshold=5)
-
-        assert len(paths) == 1
-        content = yaml.safe_load(paths[0].read_text())
-        assert content["tasks"][0]["title"] == "Fix recurring RuntimeError in unknown"
-        assert content["tasks"][0]["scope_in"] == []
-
-    def test_team_name_from_error_type(self, tmp_path, monkeypatch):
-        monkeypatch.setattr(emit, "INBOX_DIR", tmp_path)
-        triggers = [{"error_type": "Type Mismatch", "count": 5, "projects": ["forge"]}]
-        paths = emit.emit_from_triggers(triggers, threshold=5)
-
-        content = yaml.safe_load(paths[0].read_text())
-        assert content["team"] == "fix-type-mismatch"
-
-
-# ---------------------------------------------------------------------------
 # CLI integration — cmd_emit
 # ---------------------------------------------------------------------------
 
 
 class TestCmdEmit:
-    def test_from_triggers_no_triggers_prints_nothing_emitted(self, capsys):
-        from praxis.cli import cmd_emit
-
-        args = Namespace(from_triggers=True, threshold=5)
-        with (
-            patch("praxis.cli.synthesis") as mock_synth,
-            patch("praxis.cli.emit_module") as mock_emit,
-        ):
-            mock_synth.triggers.return_value = []
-            mock_emit.emit_from_triggers.return_value = []
-            cmd_emit(args)
-
-        out = capsys.readouterr().out
-        assert "Nothing emitted" in out
-
-    def test_team_task_agent_calls_emit_payload(self, capsys):
+    def test_team_task_agent_calls_emit_payload(self):
         from praxis.cli import cmd_emit
 
         args = Namespace(
-            from_triggers=False,
             team="my-team",
             task=["Do Y"],
             agent_type=["builder"],
@@ -180,12 +94,10 @@ class TestCmdEmit:
         assert call_args[0][1][0]["agent_type"] == "builder"
         assert call_args[1]["runtime"] == "local"
 
-    def test_missing_team_without_from_triggers(self, capsys):
+    def test_missing_team(self, capsys):
         from praxis.cli import cmd_emit
 
-        args = Namespace(
-            from_triggers=False, team=None, task=["X"], agent_type=["builder"]
-        )
+        args = Namespace(team=None, task=["X"], agent_type=["builder"])
         cmd_emit(args)
 
         out = capsys.readouterr().out
@@ -195,7 +107,6 @@ class TestCmdEmit:
         from praxis.cli import cmd_emit
 
         args = Namespace(
-            from_triggers=False,
             team="t",
             task=["A", "B"],
             agent_type=["builder"],
@@ -210,7 +121,6 @@ class TestCmdEmit:
         from praxis.cli import cmd_emit
 
         args = Namespace(
-            from_triggers=False,
             team="t",
             task=None,
             agent_type=["builder"],
@@ -225,7 +135,6 @@ class TestCmdEmit:
         from praxis.cli import cmd_emit
 
         args = Namespace(
-            from_triggers=False,
             team="t",
             task=["A"],
             agent_type=None,

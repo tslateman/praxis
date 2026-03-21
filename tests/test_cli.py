@@ -2,7 +2,6 @@
 
 import argparse
 import json
-import subprocess
 import sys
 
 import pytest
@@ -374,32 +373,6 @@ class TestCmdFleet:
         cli.cmd_fleet(_ns())
         out = capsys.readouterr().out
         assert "UNAVAILABLE" in out
-
-
-# --- Delegation commands ---
-
-
-class TestCmdDelegation:
-    def test_cmd_fail_delegates(self, monkeypatch):
-        calls = []
-        monkeypatch.setattr(subprocess, "run", lambda cmd, **kw: calls.append(cmd))
-        cli.cmd_fail(_ns(error_type="Timeout", message="oops"))
-        assert len(calls) == 1
-        assert calls[0] == ["lore", "fail", "Timeout", "oops"]
-
-    def test_cmd_observe_delegates(self, monkeypatch):
-        calls = []
-        monkeypatch.setattr(subprocess, "run", lambda cmd, **kw: calls.append(cmd))
-        cli.cmd_observe(_ns(text="something observed"))
-        assert len(calls) == 1
-        assert calls[0] == ["lore", "observe", "something observed"]
-
-    def test_cmd_decide_delegates(self, monkeypatch):
-        calls = []
-        monkeypatch.setattr(subprocess, "run", lambda cmd, **kw: calls.append(cmd))
-        cli.cmd_decide(_ns(text="use JSONL"))
-        assert len(calls) == 1
-        assert calls[0] == ["lore", "remember", "use JSONL"]
 
 
 # --- main() ---

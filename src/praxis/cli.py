@@ -6,7 +6,6 @@ synthesizes actionable views.
 
 import argparse
 import json
-import subprocess
 import sys
 
 from praxis import emit as emit_module
@@ -720,25 +719,6 @@ def cmd_correlate(args):
             print(f'    nearby: {d.get("id", "?")} "{d.get("decision", "")}"')
 
 
-# --- Delegation commands (pass through to Lore) ---
-
-
-def cmd_fail(args):
-    """Delegate to lore fail."""
-    cmd = ["lore", "fail", args.error_type, args.message]
-    subprocess.run(cmd)
-
-
-def cmd_observe(args):
-    """Delegate to lore observe."""
-    subprocess.run(["lore", "observe", args.text])
-
-
-def cmd_decide(args):
-    """Delegate to lore remember."""
-    subprocess.run(["lore", "remember", args.text])
-
-
 def cmd_impact(args):
     """Blast radius across the ecosystem."""
     projects = args.projects if hasattr(args, "projects") and args.projects else None
@@ -1035,21 +1015,6 @@ def main():
     p.add_argument("--window", type=int, default=24, help="Hours (default: 24)")
     p.add_argument("--json", action="store_true", help="Output raw JSON")
     p.set_defaults(func=cmd_correlate)
-
-    # -- Delegation commands --
-
-    p = sub.add_parser("fail", help="Log a failure (delegates to lore)")
-    p.add_argument("error_type", help="Error category (Timeout, NonZeroExit, etc)")
-    p.add_argument("message", help="What happened")
-    p.set_defaults(func=cmd_fail)
-
-    p = sub.add_parser("observe", help="Capture observation (delegates to lore)")
-    p.add_argument("text", help="Observation text")
-    p.set_defaults(func=cmd_observe)
-
-    p = sub.add_parser("decide", help="Record decision (delegates to lore)")
-    p.add_argument("text", help="Decision text")
-    p.set_defaults(func=cmd_decide)
 
     # -- Impact commands --
 

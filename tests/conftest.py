@@ -1,7 +1,7 @@
 """Shared fixtures for Praxis tests.
 
 Creates a temporary Lore directory tree with realistic JSONL/YAML data.
-Sets LORE_DIR so praxis.lore reads from the fixture data.
+Sets LORE_DATA_DIR so praxis.lore reads from the fixture data.
 """
 
 import json
@@ -45,7 +45,7 @@ def _write_yaml(path: Path, data):
 
 @pytest.fixture()
 def lore_dir(tmp_path, monkeypatch):
-    """Create a populated Lore directory tree and patch LORE_DIR.
+    """Create a populated Lore directory tree and patch LORE_DATA_DIR.
 
     Returns the tmp_path root so tests can add/modify files as needed.
     """
@@ -338,10 +338,10 @@ def lore_dir(tmp_path, monkeypatch):
         },
     )
 
-    # Patch the module-level LORE_DIR and clear cache
+    # Patch the module-level LORE_DATA_DIR and clear cache
     import praxis.lore as lore_mod
 
-    monkeypatch.setattr(lore_mod, "LORE_DIR", tmp_path)
+    monkeypatch.setattr(lore_mod, "LORE_DATA_DIR", tmp_path)
     lore_mod.cache_clear()
 
     yield tmp_path
@@ -355,7 +355,7 @@ def empty_lore_dir(tmp_path, monkeypatch):
     """A Lore directory with no data files at all."""
     import praxis.lore as lore_mod
 
-    monkeypatch.setattr(lore_mod, "LORE_DIR", tmp_path)
+    monkeypatch.setattr(lore_mod, "LORE_DATA_DIR", tmp_path)
     monkeypatch.setattr("praxis.spectrace.fetch_tasks", lambda: [])
     monkeypatch.setattr("praxis.spectrace.db_available", lambda: False)
     lore_mod.cache_clear()

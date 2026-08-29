@@ -3,7 +3,7 @@
 Praxis reads directly from Lore's JSONL/YAML storage. No subprocess
 calls to `lore` CLI — direct file access keeps it fast.
 
-Data locations (relative to LORE_DIR):
+Data locations (relative to LORE_DATA_DIR):
   evidence/data/evidence.jsonl     Verified evidence with provenance
   failures/data/failures.jsonl     Failure reports
   inbox/data/signals.jsonl         Raw signals (observations)
@@ -22,6 +22,7 @@ from pathlib import Path
 import yaml
 
 LORE_DIR = Path(os.environ.get("LORE_DIR", Path.home() / "dev/lore"))
+LORE_DATA_DIR = Path(os.environ.get("LORE_DATA_DIR", LORE_DIR))
 
 # --- TTL Cache ---
 
@@ -78,6 +79,16 @@ def _read_jsonl(path: Path) -> list[dict]:
     return results
 
 
+def _latest_per_id(entries: list[dict]) -> list[dict]:
+    """Collapse append-only records to the last one written per ID."""
+    by_id: dict[str, dict] = {}
+    for entry in entries:
+        entry_id = entry.get("id", "")
+        if entry_id:
+            by_id[entry_id] = entry
+    return list(by_id.values())
+
+
 @_ttl_cache()
 def _read_yaml(path: Path) -> dict | None:
     """Read a YAML file. Missing file returns None."""
@@ -105,7 +116,7 @@ def _read_yaml_dir(directory: Path) -> list[dict]:
 
 def failures() -> list[dict]:
     """Read failure reports."""
-    return _read_jsonl(LORE_DIR / "failures" / "data" / "failures.jsonl")
+    return _read_jsonl(LORE_DATA_DIR / "failures" / "data" / "failures.jsonl")
 
 
 # --- Evidence ---
@@ -113,7 +124,7 @@ def failures() -> list[dict]:
 
 def evidence() -> list[dict]:
     """Read all evidence entries."""
-    return _read_jsonl(LORE_DIR / "evidence" / "data" / "evidence.jsonl")
+    return _read_jsonl(LORE_DATA_DIR / "evidence" / "data" / "evidence.jsonl")
 
 
 def preliminary_evidence() -> list[dict]:
@@ -131,13 +142,9 @@ def confirmed_evidence() -> list[dict]:
 
 def signals() -> list[dict]:
     """Read inbox signals (latest version per ID)."""
-    all_entries = _read_jsonl(LORE_DIR / "inbox" / "data" / "signals.jsonl")
-    by_id: dict[str, dict] = {}
-    for entry in all_entries:
-        sid = entry.get("id", "")
-        if sid:
-            by_id[sid] = entry
-    return list(by_id.values())
+    return _latest_per_id(
+        _read_jsonl(LORE_DATA_DIR / "inbox" / "data" / "signals.jsonl")
+    )
 
 
 def raw_signals() -> list[dict]:
@@ -154,8 +161,10 @@ raw_observations = raw_signals
 
 
 def decisions() -> list[dict]:
-    """Read journal decisions."""
-    return _read_jsonl(LORE_DIR / "journal" / "data" / "decisions.jsonl")
+    """Read journal decisions (latest version per ID)."""
+    return _latest_per_id(
+        _read_jsonl(LORE_DATA_DIR / "journal" / "data" / "decisions.jsonl")
+    )
 
 
 # --- Intent ---
@@ -163,7 +172,7 @@ def decisions() -> list[dict]:
 
 def goals() -> list[dict]:
     """Read all goals."""
-    return _read_yaml_dir(LORE_DIR / "intent" / "data" / "goals")
+    return _read_yaml_dir(LORE_DATA_DIR / "intent" / "data" / "goals")
 
 
 def active_goals() -> list[dict]:
@@ -176,13 +185,13 @@ def active_goals() -> list[dict]:
 
 def registry() -> dict:
     """Read project relationships. Returns empty dict if missing."""
-    data = _read_yaml(LORE_DIR / "registry" / "data" / "relationships.yaml")
+    data = _read_yaml(LORE_DATA_DIR / "registry" / "data" / "relationships.yaml")
     return data if isinstance(data, dict) else {}
 
 
 def patterns() -> list[dict]:
     """Read learned patterns."""
-    data = _read_yaml(LORE_DIR / "patterns" / "data" / "patterns.yaml")
+    data = _read_yaml(LORE_DATA_DIR / "patterns" / "data" / "patterns.yaml")
     if data and isinstance(data.get("patterns"), list):
         return data["patterns"]
     return []
@@ -190,7 +199,7 @@ def patterns() -> list[dict]:
 
 def anti_patterns() -> list[dict]:
     """Read anti-patterns."""
-    data = _read_yaml(LORE_DIR / "patterns" / "data" / "patterns.yaml")
+    data = _read_yaml(LORE_DATA_DIR / "patterns" / "data" / "patterns.yaml")
     if data and isinstance(data.get("anti_patterns"), list):
         return data["anti_patterns"]
     return []

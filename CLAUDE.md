@@ -37,17 +37,20 @@ from zero to productive.
 | `praxis context`      | Filtered context brief for agent prompts        |
 | `praxis verify`       | Ground-truth verification against code          |
 | `praxis drift`        | Decision reversals over time                    |
-| `praxis stale`        | Observations aging without action               |
+| `praxis stale`        | Signals aging without action                    |
 | `praxis overlap`      | Command name conflicts across projects          |
 | `praxis complexity`   | Projects exceeding complexity thresholds        |
 | `praxis correlate`    | Failures alongside nearby decisions             |
 | `praxis undocumented` | Decisions and patterns lacking rationale        |
+| `praxis fleet`        | Fleet status: agents, tasks, merge queue        |
+| `praxis emit`         | Fleet dispatch payload to Blueprint inbox       |
 
 ## Architecture
 
 - **Storage**: None. Lore owns all data.
 - **Reads from**: Lore (intent, failures, inbox, journal, patterns), SpecTrace (requirements, test results)
-- **Writes via**: Delegation to `lore` CLI
+- **Writes**: None. Record decisions and failures with the `lore` CLI directly.
+- **Data path**: `$LORE_DATA_DIR`, falling back to `$LORE_DIR`, then `~/dev/lore`
 - **Dependencies**: Python 3.10+, PyYAML, Lore
 
 ## Layout
@@ -73,6 +76,7 @@ make format  # ruff format --check
 - `plans/add-ci.md` -- CI workflow, ruff config, Makefile (commit `c05a3a9`)
 
 <!-- gitnexus:start -->
+
 # GitNexus — Code Intelligence
 
 This project is indexed by GitNexus as **praxis** (690 symbols, 1115 relationships, 26 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
@@ -97,22 +101,22 @@ This project is indexed by GitNexus as **praxis** (690 symbols, 1115 relationshi
 
 ## Resources
 
-| Resource | Use for |
-|----------|---------|
-| `gitnexus://repo/praxis/context` | Codebase overview, check index freshness |
-| `gitnexus://repo/praxis/clusters` | All functional areas |
-| `gitnexus://repo/praxis/processes` | All execution flows |
-| `gitnexus://repo/praxis/process/{name}` | Step-by-step execution trace |
+| Resource                                | Use for                                  |
+| --------------------------------------- | ---------------------------------------- |
+| `gitnexus://repo/praxis/context`        | Codebase overview, check index freshness |
+| `gitnexus://repo/praxis/clusters`       | All functional areas                     |
+| `gitnexus://repo/praxis/processes`      | All execution flows                      |
+| `gitnexus://repo/praxis/process/{name}` | Step-by-step execution trace             |
 
 ## CLI
 
-| Task | Read this skill file |
-|------|---------------------|
-| Understand architecture / "How does X work?" | `.claude/skills/gitnexus/gitnexus-exploring/SKILL.md` |
-| Blast radius / "What breaks if I change X?" | `.claude/skills/gitnexus/gitnexus-impact-analysis/SKILL.md` |
-| Trace bugs / "Why is X failing?" | `.claude/skills/gitnexus/gitnexus-debugging/SKILL.md` |
-| Rename / extract / split / refactor | `.claude/skills/gitnexus/gitnexus-refactoring/SKILL.md` |
-| Tools, resources, schema reference | `.claude/skills/gitnexus/gitnexus-guide/SKILL.md` |
-| Index, status, clean, wiki CLI commands | `.claude/skills/gitnexus/gitnexus-cli/SKILL.md` |
+| Task                                         | Read this skill file                                        |
+| -------------------------------------------- | ----------------------------------------------------------- |
+| Understand architecture / "How does X work?" | `.claude/skills/gitnexus/gitnexus-exploring/SKILL.md`       |
+| Blast radius / "What breaks if I change X?"  | `.claude/skills/gitnexus/gitnexus-impact-analysis/SKILL.md` |
+| Trace bugs / "Why is X failing?"             | `.claude/skills/gitnexus/gitnexus-debugging/SKILL.md`       |
+| Rename / extract / split / refactor          | `.claude/skills/gitnexus/gitnexus-refactoring/SKILL.md`     |
+| Tools, resources, schema reference           | `.claude/skills/gitnexus/gitnexus-guide/SKILL.md`           |
+| Index, status, clean, wiki CLI commands      | `.claude/skills/gitnexus/gitnexus-cli/SKILL.md`             |
 
 <!-- gitnexus:end -->

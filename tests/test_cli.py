@@ -358,18 +358,18 @@ class TestCmdCorrelate:
 
 
 class TestCmdFleet:
-    def test_produces_output(self, lore_dir, capsys):
+    def test_produces_output(self, lore_dir, missing_fleet_db, capsys):
         cli.cmd_fleet(_ns())
         out = capsys.readouterr().out
         assert "Fleet:" in out
 
-    def test_json_mode(self, lore_dir, capsys):
+    def test_json_mode(self, lore_dir, missing_fleet_db, capsys):
         cli.cmd_fleet(_ns(json=True))
         out = capsys.readouterr().out
         data = json.loads(out)
         assert "status" in data
 
-    def test_unavailable_message(self, lore_dir, capsys):
+    def test_unavailable_message(self, lore_dir, missing_fleet_db, capsys):
         cli.cmd_fleet(_ns())
         out = capsys.readouterr().out
         assert "UNAVAILABLE" in out

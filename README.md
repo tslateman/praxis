@@ -26,7 +26,8 @@ Praxis reads from Lore's memory (intent, failures, inbox, journal, patterns) and
 
 - Python 3.10+
 - PyYAML (`pip install pyyaml`)
-- Lore at `~/dev/lore/`
+- Lore, with its data directory at `$LORE_DATA_DIR` (defaults to `$LORE_DIR`,
+  itself defaulting to `~/dev/lore/`)
 
 No installation step. No `pip install`. The CLI runs directly from the repo.
 
@@ -40,39 +41,41 @@ export PATH="$HOME/dev/praxis/bin:$PATH"
 
 ### Operational
 
-| Command           | Description                            |
-| ----------------- | -------------------------------------- |
-| `praxis status`   | Where am I? Active goals, blockers     |
-| `praxis next`     | What should I work on now?             |
-| `praxis blockers` | Failures, stale observations, friction |
-| `praxis health`   | Ecosystem pulse — single-page summary  |
+| Command           | Description                           |
+| ----------------- | ------------------------------------- |
+| `praxis status`   | Where am I? Active goals, blockers    |
+| `praxis next`     | What should I work on now?            |
+| `praxis blockers` | Failures, stale signals, friction     |
+| `praxis health`   | Ecosystem pulse — single-page summary |
+| `praxis context`  | Filtered context brief for agents     |
+| `praxis fleet`    | Agents, tasks, merge queue            |
 
 ### Analysis
 
-| Command              | Description                           |
-| -------------------- | ------------------------------------- |
-| `praxis friction`    | Failures mapped to project boundaries |
-| `praxis blind-spots` | Recurring failures without decisions  |
-| `praxis stale`       | Observations aging without action     |
-| `praxis correlate`   | Failures alongside nearby decisions   |
-
-### Delegation (writes go to Lore)
-
-| Praxis Shortcut         | Delegates To           |
-| ----------------------- | ---------------------- |
-| `praxis fail <args>`    | `lore fail <args>`     |
-| `praxis observe <text>` | `lore observe <text>`  |
-| `praxis decide <text>`  | `lore remember <text>` |
+| Command               | Description                              |
+| --------------------- | ---------------------------------------- |
+| `praxis friction`     | Failures mapped to project boundaries    |
+| `praxis blind-spots`  | Recurring failures without decisions     |
+| `praxis stale`        | Signals aging without action             |
+| `praxis correlate`    | Failures alongside nearby decisions      |
+| `praxis refinement`   | Decisions ripe for promotion to patterns |
+| `praxis drift`        | Decision reversals over time             |
+| `praxis undocumented` | Decisions and patterns lacking rationale |
+| `praxis overlap`      | Command name conflicts across projects   |
+| `praxis complexity`   | Projects exceeding complexity thresholds |
+| `praxis impact`       | Blast radius across the ecosystem        |
+| `praxis verify`       | Ground-truth verification against code   |
+| `praxis emit`         | Fleet dispatch payload to Blueprint      |
 
 ## Design
 
-Praxis is a pure facade. It:
+Praxis reads and synthesizes. It:
 
-1. **Reads** from Lore's JSONL files (failures, inbox, journal, intent)
+1. **Reads** from Lore's JSONL and YAML files (failures, inbox, journal, intent, patterns)
 2. **Synthesizes** actionable views (status, next, blockers)
-3. **Delegates** writes to Lore CLI
 
-No direct file writes. No duplicate storage. Lore is the single source of truth.
+It writes nothing. Record decisions and failures with the `lore` CLI directly.
+No duplicate storage. Lore is the single source of truth.
 
 ## Development History
 

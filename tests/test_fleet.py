@@ -131,13 +131,6 @@ def fleet_db(tmp_path, monkeypatch):
     return db_path
 
 
-@pytest.fixture()
-def missing_fleet_db(tmp_path, monkeypatch):
-    """Point FLEET_DB_PATH at a nonexistent file."""
-    monkeypatch.setattr(fleet, "FLEET_DB_PATH", tmp_path / "nope.db")
-    return tmp_path
-
-
 class TestAgents:
     def test_returns_active_agents(self, fleet_db):
         result = fleet.agents()

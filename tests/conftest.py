@@ -12,6 +12,15 @@ import pytest
 import yaml
 
 
+@pytest.fixture()
+def missing_fleet_db(tmp_path, monkeypatch):
+    """Point FLEET_DB_PATH at a nonexistent file."""
+    from praxis import fleet
+
+    monkeypatch.setattr(fleet, "FLEET_DB_PATH", tmp_path / "nope.db")
+    return tmp_path
+
+
 def _now():
     return datetime.now(timezone.utc)
 

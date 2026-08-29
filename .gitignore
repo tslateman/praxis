@@ -2,5 +2,4 @@ __pycache__/
 *.pyc
 *.pyo
 src/praxis.egg-info/
-.gitnexus
 .claude/settings.local.json

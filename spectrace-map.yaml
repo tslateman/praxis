@@ -1,0 +1,38 @@
+project: praxis
+modules:
+  src/praxis/cli.py:
+    requirements: [REQ-PRX-003]
+  src/praxis/synthesis.py:
+    requirements: [REQ-PRX-002]
+  src/praxis/lore.py:
+    requirements: [REQ-PRX-001]
+  src/praxis/spectrace.py:
+    requirements: [REQ-PRX-004]
+  src/praxis/fleet.py:
+    requirements: [REQ-PRX-005]
+  src/praxis/impact.py:
+    requirements: [REQ-PRX-006]
+  src/praxis/emit.py:
+    requirements: [REQ-PRX-007]
+  src/praxis/__init__.py:
+    requirements: [REQ-PRX-000]
+  bin/praxis:
+    requirements: [REQ-PRX-003]
+  pyproject.toml:
+    requirements: [REQ-PRX-000, REQ-PRX-003]
+  tests/test_cli.py:
+    requirements: [REQ-PRX-003]
+  tests/test_synthesis.py:
+    requirements: [REQ-PRX-002]
+  tests/test_lore.py:
+    requirements: [REQ-PRX-001]
+  tests/test_spectrace.py:
+    requirements: [REQ-PRX-004]
+  tests/test_fleet.py:
+    requirements: [REQ-PRX-005]
+  tests/test_impact.py:
+    requirements: [REQ-PRX-006]
+  tests/test_emit.py:
+    requirements: [REQ-PRX-007]
+  tests/conftest.py:
+    requirements: [REQ-PRX-000]

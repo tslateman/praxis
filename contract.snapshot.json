@@ -1,0 +1,17 @@
+{
+  "project": "praxis",
+  "surfaces": {
+    "cli/praxis": {
+      "entry_point": "praxis.cli:main",
+      "format": "cli"
+    },
+    "spectrace-map.yaml": {
+      "fields": [
+        "modules",
+        "project"
+      ],
+      "format": "yaml"
+    }
+  },
+  "version": "1.0"
+}

@@ -8,10 +8,24 @@ modules:
     requirements: [REQ-PRX-001]
   src/praxis/spectrace.py:
     requirements: [REQ-PRX-004]
+    depends_on:
+      - spectrace:db/requirements_requirement
+      - spectrace:db/requirements_agenttask
+      - spectrace:db/requirements_agenttask_requirements
+      - spectrace:db/requirements_requirement_depends_on
+      - spectrace:db/requirements_testrequirementlink
+      - spectrace:db/requirements_testresult
+      - spectrace:db/requirements_testrun
+      - spectrace:enum/requirements_agenttask.status
+      - spectrace:enum/requirements_requirement.risk_level
+      - spectrace:enum/requirements_requirement.verification_status
+      - spectrace:enum/requirements_testresult.status
   src/praxis/fleet.py:
     requirements: [REQ-PRX-005]
   src/praxis/impact.py:
     requirements: [REQ-PRX-006]
+    depends_on:
+      - spectrace:spectrace-map.yaml
   src/praxis/emit.py:
     requirements: [REQ-PRX-007]
   src/praxis/__init__.py:

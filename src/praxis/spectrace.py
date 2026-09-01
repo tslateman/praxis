@@ -1,7 +1,9 @@
 """Read from SpecTrace's SQLite database.
 
-Praxis reads directly from SpecTrace's db.sqlite3. Returns empty results
-when the database doesn't exist or tables are missing.
+Praxis reads directly from SpecTrace's db.sqlite3. An absent database yields
+empty results, because Praxis runs without SpecTrace. A query against a
+database that is present raises, so a moved table or column fails loudly.
+Callers that tolerate an unmigrated database gate on db_available().
 
 DB location: ~/dev/forge/spec-trace/spectrace/db.sqlite3
 """
@@ -13,19 +15,19 @@ DB_PATH = os.path.expanduser("~/dev/forge/spec-trace/spectrace/db.sqlite3")
 
 
 def _query(sql: str, params: tuple = ()) -> list[dict]:
-    """Run a query against SpecTrace's DB. Returns empty list on any error."""
+    """Run a query against SpecTrace's DB. Returns an empty list when it is absent.
+
+    Raises sqlite3.Error when the database is present and the query fails.
+    """
     if not os.path.exists(DB_PATH):
         return []
-    try:
-        with sqlite3.connect(DB_PATH) as conn:
-            conn.row_factory = sqlite3.Row
-            return [dict(row) for row in conn.execute(sql, params).fetchall()]
-    except sqlite3.Error:
-        return []
+    with sqlite3.connect(DB_PATH) as conn:
+        conn.row_factory = sqlite3.Row
+        return [dict(row) for row in conn.execute(sql, params).fetchall()]
 
 
 def _query_one(sql: str, params: tuple = ()) -> dict | None:
-    """Run a query expecting a single row. Returns None on any error."""
+    """Run a query expecting a single row. Returns None when it yields no rows."""
     rows = _query(sql, params)
     return rows[0] if rows else None
 

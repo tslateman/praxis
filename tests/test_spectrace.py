@@ -202,6 +202,21 @@ def empty_db(tmp_path, monkeypatch):
     monkeypatch.setattr(spectrace, "DB_PATH", db_path)
 
 
+@pytest.fixture()
+def renamed_column_db(tmp_path, monkeypatch):
+    """SpecTrace DB whose agenttask.claimed_by_id column carries a new name."""
+    db_path = str(tmp_path / "renamed_column.sqlite3")
+    conn = sqlite3.connect(db_path)
+    _create_schema(conn)
+    conn.execute(
+        "ALTER TABLE requirements_agenttask RENAME COLUMN claimed_by_id TO assignee_id"
+    )
+    conn.commit()
+    conn.close()
+    monkeypatch.setattr(spectrace, "DB_PATH", db_path)
+    return db_path
+
+
 class TestDbAvailable:
     def test_true_with_tables(self, spectrace_db):
         assert spectrace.db_available() is True
@@ -323,3 +338,13 @@ class TestIntegrationRisks:
 
     def test_missing_db_returns_empty(self, missing_db):
         assert spectrace.integration_risks() == []
+
+
+class TestSchemaDrift:
+    def test_fetch_tasks__raises_when_table_is_missing(self, empty_db):
+        with pytest.raises(sqlite3.OperationalError, match="requirements_agenttask"):
+            spectrace.fetch_tasks()
+
+    def test_fetch_tasks__raises_when_column_is_renamed(self, renamed_column_db):
+        with pytest.raises(sqlite3.OperationalError, match="claimed_by_id"):
+            spectrace.fetch_tasks()

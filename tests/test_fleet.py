@@ -18,6 +18,34 @@ SHIPYARD_SCHEMA_PATH = Path(
 )
 
 
+def _build_db(path: Path, schema: str) -> Path:
+    conn = sqlite3.connect(str(path))
+    conn.executescript(schema)
+    conn.commit()
+    conn.close()
+    return path
+
+
+@pytest.fixture()
+def renamed_view_db(tmp_path, monkeypatch):
+    """Build a fleet.db whose inv_all_violations view carries a new name."""
+    schema = SHIPYARD_SCHEMA_PATH.read_text().replace(
+        "CREATE VIEW inv_all_violations", "CREATE VIEW inv_violation_report"
+    )
+    db_path = _build_db(tmp_path / "renamed_view.db", schema)
+    monkeypatch.setattr(fleet, "FLEET_DB_PATH", db_path)
+    return db_path
+
+
+@pytest.fixture()
+def renamed_column_db(tmp_path, monkeypatch):
+    """Build a fleet.db whose agents.is_active column carries a new name."""
+    schema = SHIPYARD_SCHEMA_PATH.read_text().replace("is_active", "active")
+    db_path = _build_db(tmp_path / "renamed_column.db", schema)
+    monkeypatch.setattr(fleet, "FLEET_DB_PATH", db_path)
+    return db_path
+
+
 @pytest.fixture()
 def fleet_db(tmp_path, monkeypatch):
     """Create a fleet.db with test data and patch FLEET_DB_PATH."""
@@ -133,6 +161,18 @@ def fleet_db(tmp_path, monkeypatch):
         f"'ValidationFailure', 'Tests failed', {now})"
     )
 
+    # Token usage
+    conn.execute(
+        "INSERT INTO token_usage "
+        "(agent_id, task_id, model, input_tokens, output_tokens, recorded_at) "
+        f"VALUES ('agent-1', 'task-2', 'claude-sonnet-4-6', 1000, 250, {now})"
+    )
+    conn.execute(
+        "INSERT INTO token_usage "
+        "(agent_id, task_id, model, input_tokens, output_tokens, recorded_at) "
+        f"VALUES ('agent-1', 'task-2', 'claude-sonnet-4-6', 500, 100, {now})"
+    )
+
     conn.commit()
     conn.close()
 
@@ -211,6 +251,74 @@ class TestInvariantViolations:
 
     def test_missing_db_returns_empty(self, missing_fleet_db):
         assert fleet.invariant_violations() == []
+
+    def test_invariant_violations__reports_terminal_task_holding_a_lease(
+        self, fleet_db
+    ):
+        conn = sqlite3.connect(str(fleet_db))
+        conn.execute(
+            "UPDATE tasks SET lease_expires = datetime('now', '+30 minutes') "
+            "WHERE task_id = 'task-3'"
+        )
+        conn.commit()
+        conn.close()
+        result = fleet.invariant_violations()
+        assert len(result) == 1
+        assert result[0]["code"] == "INV-E"
+        assert result[0]["subject_id"] == "task-3"
+        assert result[0]["subject_type"] == "task"
+        assert result[0]["severity"] == "error"
+
+
+class TestTokenSummary:
+    def test_token_summary__aggregates_tokens_per_agent_and_model(self, fleet_db):
+        result = fleet.token_summary()
+        assert len(result) == 1
+        row = result[0]
+        assert row["agent_id"] == "agent-1"
+        assert row["team_id"] == "team-1"
+        assert row["model"] == "claude-sonnet-4-6"
+        assert row["total_input_tokens"] == 1500
+        assert row["total_output_tokens"] == 350
+        assert row["total_tokens"] == 1850
+
+    def test_token_summary__returns_empty_when_db_missing(self, missing_fleet_db):
+        assert fleet.token_summary() == []
+
+
+class TestExpiredLeases:
+    def test_expired_leases__reports_tasks_past_their_lease(self, fleet_db):
+        conn = sqlite3.connect(str(fleet_db))
+        conn.execute(
+            "UPDATE tasks SET lease_expires = datetime('now', '-10 minutes') "
+            "WHERE task_id = 'task-2'"
+        )
+        conn.commit()
+        conn.close()
+        result = fleet.expired_leases()
+        assert len(result) == 1
+        row = result[0]
+        assert row["task_id"] == "task-2"
+        assert row["team_id"] == "team-1"
+        assert row["status"] == "in_progress"
+        assert row["claimed_by"] == "agent-1"
+        assert row["minutes_overdue"] > 0
+
+    def test_expired_leases__skips_tasks_inside_their_lease(self, fleet_db):
+        assert fleet.expired_leases() == []
+
+    def test_expired_leases__returns_empty_when_db_missing(self, missing_fleet_db):
+        assert fleet.expired_leases() == []
+
+
+class TestSchemaDrift:
+    def test_invariant_violations__raises_when_view_is_renamed(self, renamed_view_db):
+        with pytest.raises(sqlite3.OperationalError, match="inv_all_violations"):
+            fleet.invariant_violations()
+
+    def test_agents__raises_when_column_is_renamed(self, renamed_column_db):
+        with pytest.raises(sqlite3.OperationalError, match="is_active"):
+            fleet.agents()
 
 
 class TestRuleOfThreeViolations:

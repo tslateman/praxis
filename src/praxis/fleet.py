@@ -1,7 +1,8 @@
 """Read from fleet.db — agent fleet management database.
 
-Praxis reads directly from fleet.db SQLite. Returns empty results
-when the database doesn't exist.
+Praxis reads directly from fleet.db SQLite. An absent database yields empty
+results, because Praxis runs without Shipyard. A query against a database
+that is present raises, so a moved view or column fails loudly.
 
 DB location: FLEET_DB env var or ~/dev/shipyard/fleet.db
 """
@@ -14,15 +15,15 @@ FLEET_DB_PATH = Path(os.environ.get("FLEET_DB", Path.home() / "dev/shipyard/flee
 
 
 def _query(sql: str, params: tuple = ()) -> list[dict]:
-    """Run a query against fleet.db. Returns empty list on any error."""
+    """Run a query against fleet.db. Returns an empty list when fleet.db is absent.
+
+    Raises sqlite3.Error when fleet.db is present and the query fails.
+    """
     if not FLEET_DB_PATH.exists():
         return []
-    try:
-        with sqlite3.connect(str(FLEET_DB_PATH)) as conn:
-            conn.row_factory = sqlite3.Row
-            return [dict(row) for row in conn.execute(sql, params).fetchall()]
-    except sqlite3.Error:
-        return []
+    with sqlite3.connect(str(FLEET_DB_PATH)) as conn:
+        conn.row_factory = sqlite3.Row
+        return [dict(row) for row in conn.execute(sql, params).fetchall()]
 
 
 def agents() -> list[dict]:

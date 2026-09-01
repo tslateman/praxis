@@ -18,6 +18,13 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Checkout Shipyard schema
+        uses: actions/checkout@v4
+        with:
+          repository: tslateman/shipyard
+          ref: main
+          path: .shipyard
+
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
@@ -37,3 +44,5 @@ jobs:
 
       - name: Test
         run: pytest
+        env:
+          SHIPYARD_SCHEMA: ${{ github.workspace }}/.shipyard/src/schema/fleet.sql

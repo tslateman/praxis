@@ -1,11 +1,21 @@
-"""Tests for praxis.fleet — fleet.db reader."""
+"""Tests for praxis.fleet — fleet.db reader.
 
+These tests build a fleet.db from Shipyard's own schema, so they need a
+Shipyard checkout. Set SHIPYARD_SCHEMA to point at src/schema/fleet.sql
+elsewhere; it defaults to ~/dev/shipyard.
+"""
+
+import os
 import sqlite3
 from pathlib import Path
 
 import pytest
 
 from praxis import fleet
+
+SHIPYARD_SCHEMA_PATH = Path(
+    os.environ.get("SHIPYARD_SCHEMA", Path.home() / "dev/shipyard/src/schema/fleet.sql")
+)
 
 
 @pytest.fixture()
@@ -15,8 +25,7 @@ def fleet_db(tmp_path, monkeypatch):
     conn = sqlite3.connect(str(db_path))
 
     # Read and execute the schema
-    schema_path = Path.home() / "dev/shipyard/src/schema/fleet.sql"
-    conn.executescript(schema_path.read_text())
+    conn.executescript(SHIPYARD_SCHEMA_PATH.read_text())
 
     # Insert test data
     conn.execute(

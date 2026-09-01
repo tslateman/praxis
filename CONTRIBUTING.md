@@ -62,6 +62,17 @@ python -m pytest
 bin/praxis status
 ```
 
+The fleet tests build a fleet.db from Shipyard's schema, so they need a
+Shipyard checkout at `~/dev/shipyard`. Point `SHIPYARD_SCHEMA` at
+`src/schema/fleet.sql` to use a checkout elsewhere:
+
+```bash
+SHIPYARD_SCHEMA=/path/to/shipyard/src/schema/fleet.sql python -m pytest
+```
+
+CI checks out Shipyard's `main` and reads the same file, so a schema change
+that breaks Praxis turns the build red instead of passing unnoticed.
+
 ## Pull Requests
 
 1. Branch from `main` with a descriptive name

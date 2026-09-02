@@ -1,11 +1,13 @@
-"""Read from SpecTrace's SQLite database.
+"""Read from SpecTrace's database.
 
-Praxis reads directly from SpecTrace's db.sqlite3. An absent database yields
-empty results, because Praxis runs without SpecTrace. A query against a
-database that is present raises, so a moved table or column fails loudly.
-Callers that tolerate an unmigrated database gate on db_available().
+With DATABASE_URL set, Praxis reads the shared SpecTrace Postgres over
+psycopg; queries there fail loudly, because setting the URL asserts the
+database exists. Without it, Praxis reads the local db.sqlite3, and an absent
+file yields empty results, because Praxis runs without SpecTrace. Either way a
+query against a reachable database raises on a moved table or column. Callers
+that tolerate an unmigrated or unreachable database gate on db_available().
 
-DB location: ~/dev/forge/spec-trace/spectrace/db.sqlite3
+SQLite location: ~/dev/forge/spec-trace/spectrace/db.sqlite3
 """
 
 import os
@@ -14,11 +16,33 @@ import sqlite3
 DB_PATH = os.path.expanduser("~/dev/forge/spec-trace/spectrace/db.sqlite3")
 
 
-def _query(sql: str, params: tuple = ()) -> list[dict]:
-    """Run a query against SpecTrace's DB. Returns an empty list when it is absent.
+def _database_url() -> str | None:
+    return os.environ.get("DATABASE_URL") or None
 
-    Raises sqlite3.Error when the database is present and the query fails.
+
+def _to_postgres(sql: str) -> str:
+    """Rewrite sqlite3 qmark placeholders to psycopg format placeholders."""
+    return sql.replace("?", "%s")
+
+
+def _postgres_query(url: str, sql: str, params: tuple) -> list[dict]:
+    """Run a query against the shared Postgres. Raises on any failure."""
+    import psycopg
+    from psycopg.rows import dict_row
+
+    with psycopg.connect(url, row_factory=dict_row, connect_timeout=10) as conn:
+        return conn.execute(_to_postgres(sql), params).fetchall()
+
+
+def _query(sql: str, params: tuple = ()) -> list[dict]:
+    """Run a query against SpecTrace's DB.
+
+    Returns an empty list when no DATABASE_URL is set and the SQLite file is
+    absent. Raises when the database is present and the query fails.
     """
+    url = _database_url()
+    if url:
+        return _postgres_query(url, sql, params)
     if not os.path.exists(DB_PATH):
         return []
     with sqlite3.connect(DB_PATH) as conn:
@@ -42,14 +66,25 @@ def _table_exists(table: str) -> bool:
 
 
 def db_available() -> bool:
-    """True if SpecTrace DB exists and has the requirements table."""
+    """True if the SpecTrace DB is reachable and has the requirements table."""
+    url = _database_url()
+    if url:
+        import psycopg
+
+        try:
+            row = _postgres_query(
+                url, "SELECT to_regclass('requirements_requirement') AS name", ()
+            )
+        except psycopg.OperationalError:
+            return False
+        return bool(row and row[0]["name"])
     if not os.path.exists(DB_PATH):
         return False
     return _table_exists("requirements_requirement")
 
 
 def fetch_tasks() -> list[dict]:
-    """Fetch all tasks from the SpecTrace SQLite database."""
+    """Fetch all tasks from the SpecTrace database."""
     return _query(
         "SELECT external_id, title, status, claimed_by_id FROM requirements_agenttask"
     )

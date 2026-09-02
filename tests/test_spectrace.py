@@ -184,6 +184,7 @@ def spectrace_db(tmp_path, monkeypatch):
     conn.commit()
     conn.close()
 
+    monkeypatch.delenv("DATABASE_URL", raising=False)
     monkeypatch.setattr(spectrace, "DB_PATH", db_path)
     return db_path
 
@@ -191,6 +192,7 @@ def spectrace_db(tmp_path, monkeypatch):
 @pytest.fixture()
 def missing_db(tmp_path, monkeypatch):
     """Point DB_PATH at a nonexistent file."""
+    monkeypatch.delenv("DATABASE_URL", raising=False)
     monkeypatch.setattr(spectrace, "DB_PATH", str(tmp_path / "nope.db"))
 
 
@@ -199,6 +201,7 @@ def empty_db(tmp_path, monkeypatch):
     """DB exists but has no SpecTrace tables."""
     db_path = str(tmp_path / "empty.db")
     sqlite3.connect(db_path).close()
+    monkeypatch.delenv("DATABASE_URL", raising=False)
     monkeypatch.setattr(spectrace, "DB_PATH", db_path)
 
 
@@ -213,6 +216,7 @@ def renamed_column_db(tmp_path, monkeypatch):
     )
     conn.commit()
     conn.close()
+    monkeypatch.delenv("DATABASE_URL", raising=False)
     monkeypatch.setattr(spectrace, "DB_PATH", db_path)
     return db_path
 
@@ -338,6 +342,29 @@ class TestIntegrationRisks:
 
     def test_missing_db_returns_empty(self, missing_db):
         assert spectrace.integration_risks() == []
+
+
+class TestPostgresDispatch:
+    def test_url_routes_queries_to_postgres(self, monkeypatch):
+        monkeypatch.setenv("DATABASE_URL", "postgres://example/spectrace")
+        captured = {}
+
+        def fake_postgres_query(url, sql, params):
+            captured["url"] = url
+            return [{"external_id": "T-PG"}]
+
+        monkeypatch.setattr(spectrace, "_postgres_query", fake_postgres_query)
+        result = spectrace.fetch_tasks()
+        assert result == [{"external_id": "T-PG"}]
+        assert captured["url"] == "postgres://example/spectrace"
+
+    def test_no_url_stays_on_sqlite(self, missing_db):
+        assert spectrace.fetch_tasks() == []
+
+    def test_placeholders_rewritten_for_postgres(self):
+        assert spectrace._to_postgres("SELECT * FROM t WHERE a=? AND b=?") == (
+            "SELECT * FROM t WHERE a=%s AND b=%s"
+        )
 
 
 class TestSchemaDrift:

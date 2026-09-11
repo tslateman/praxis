@@ -1,5 +1,6 @@
 """Tests for praxis.spectrace — SpecTrace DB reader."""
 
+import importlib.util
 import sqlite3
 
 import pytest
@@ -375,3 +376,19 @@ class TestSchemaDrift:
     def test_fetch_tasks__raises_when_column_is_renamed(self, renamed_column_db):
         with pytest.raises(sqlite3.OperationalError, match="claimed_by_id"):
             spectrace.fetch_tasks()
+
+
+class TestPostgresMissingDependency:
+    """Exercises the real (unmocked) psycopg import path.
+
+    CI installs only the base package, so psycopg is absent here too --
+    the same gap a contributor following the documented `pip install pyyaml`
+    setup hits when they set DATABASE_URL.
+    """
+
+    def test_db_available_raises_actionable_error_without_psycopg(self, monkeypatch):
+        if importlib.util.find_spec("psycopg") is not None:
+            pytest.skip("psycopg is installed; this covers the missing-extra path")
+        monkeypatch.setenv("DATABASE_URL", "postgresql://example/db")
+        with pytest.raises(RuntimeError, match=r"pip install .*\[spectrace\]"):
+            spectrace.db_available()

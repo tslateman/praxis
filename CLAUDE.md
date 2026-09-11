@@ -51,7 +51,9 @@ from zero to productive.
 - **Reads from**: Lore (intent, failures, inbox, journal, patterns), SpecTrace (requirements, test results)
 - **Writes**: None. Record decisions and failures with the `lore` CLI directly.
 - **Data path**: `$LORE_DATA_DIR`, falling back to `$LORE_DIR`, then `~/dev/lore`
-- **Dependencies**: Python 3.10+, PyYAML, Lore
+- **Dependencies**: Python 3.10+, PyYAML, Lore. `DATABASE_URL` routes
+  SpecTrace reads through Postgres and needs the `spectrace` extra
+  (`pip install -e .[spectrace]`, adds psycopg)
 
 ## Layout
 

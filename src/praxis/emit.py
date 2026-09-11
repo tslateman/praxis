@@ -28,8 +28,18 @@ def emit_payload(team: str, tasks: list[dict], runtime: str = "local") -> Path:
     """
     INBOX_DIR.mkdir(parents=True, exist_ok=True)
     ts = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S")
-    filename = f"{ts}_{team}.yaml"
-    path = INBOX_DIR / filename
     payload = {"team": team, "runtime": runtime, "tasks": tasks}
-    path.write_text(yaml.dump(payload, default_flow_style=False, sort_keys=False))
-    return path
+    content = yaml.dump(payload, default_flow_style=False, sort_keys=False)
+
+    suffix = 0
+    while True:
+        filename = f"{ts}_{team}.yaml" if suffix == 0 else f"{ts}-{suffix}_{team}.yaml"
+        path = INBOX_DIR / filename
+        try:
+            fd = os.open(path, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+        except FileExistsError:
+            suffix += 1
+            continue
+        with os.fdopen(fd, "w") as f:
+            f.write(content)
+        return path

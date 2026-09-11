@@ -2,11 +2,19 @@
 
 import re
 from argparse import Namespace
+from datetime import datetime
 from unittest.mock import patch
 
 import yaml
 
 import praxis.emit as emit
+
+
+class _FrozenDatetime(datetime):
+    @classmethod
+    def now(cls, tz=None):
+        return cls(2024, 1, 1, 12, 0, 0, tzinfo=tz)
+
 
 # ---------------------------------------------------------------------------
 # emit_payload
@@ -65,6 +73,27 @@ class TestEmitPayload:
 
         assert path.parent == custom
         assert path.exists()
+
+    def test_same_second_dispatches_do_not_collide(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(emit, "INBOX_DIR", tmp_path)
+        monkeypatch.setattr(emit, "datetime", _FrozenDatetime)
+        tasks_a = [
+            {"name": "task-0-fix-a", "title": "Fix A", "agent_type": "backend-dev"}
+        ]
+        tasks_b = [
+            {"name": "task-0-fix-b", "title": "Fix B", "agent_type": "backend-dev"}
+        ]
+
+        path_a = emit.emit_payload("backend", tasks_a)
+        path_b = emit.emit_payload("backend", tasks_b)
+
+        assert path_a != path_b
+        assert path_a.exists()
+        assert path_b.exists()
+        content_a = yaml.safe_load(path_a.read_text())
+        content_b = yaml.safe_load(path_b.read_text())
+        assert content_a["tasks"][0]["title"] == "Fix A"
+        assert content_b["tasks"][0]["title"] == "Fix B"
 
 
 # ---------------------------------------------------------------------------

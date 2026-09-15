@@ -25,9 +25,20 @@ def _to_postgres(sql: str) -> str:
     return sql.replace("?", "%s")
 
 
+def _require_psycopg():
+    try:
+        import psycopg
+    except ImportError as exc:
+        raise RuntimeError(
+            "DATABASE_URL is set but psycopg isn't installed. "
+            "Install the spectrace extra: pip install -e .[spectrace]"
+        ) from exc
+    return psycopg
+
+
 def _postgres_query(url: str, sql: str, params: tuple) -> list[dict]:
     """Run a query against the shared Postgres. Raises on any failure."""
-    import psycopg
+    psycopg = _require_psycopg()
     from psycopg.rows import dict_row
 
     with psycopg.connect(url, row_factory=dict_row, connect_timeout=10) as conn:
@@ -69,7 +80,7 @@ def db_available() -> bool:
     """True if the SpecTrace DB is reachable and has the requirements table."""
     url = _database_url()
     if url:
-        import psycopg
+        psycopg = _require_psycopg()
 
         try:
             row = _postgres_query(

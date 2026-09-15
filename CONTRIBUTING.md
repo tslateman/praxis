@@ -13,16 +13,23 @@ pip install pyyaml
 bin/praxis status
 ```
 
+Set `DATABASE_URL` to read SpecTrace from the shared Postgres instead of the
+local SQLite file. That path requires the `spectrace` extra:
+
+```bash
+pip install -e '.[spectrace]'
+```
+
 ## Code Style
 
-| Convention    | Rule                                            |
-| ------------- | ----------------------------------------------- |
-| Python        | 3.10+, stdlib preferred, PyYAML only dependency |
-| Reads         | From Lore's data files via `src/praxis/lore.py` |
-| Writes        | Delegate to `lore` CLI -- never write directly  |
-| Configuration | TOML for config, YAML for registries            |
-| Prose         | Strunk's Elements of Style -- active, concrete  |
-| Emdashes      | Never. Use double hyphens (`--`) instead        |
+| Convention    | Rule                                                     |
+| ------------- | -------------------------------------------------------- |
+| Python        | 3.10+, stdlib preferred, PyYAML only required dependency |
+| Reads         | From Lore's data files via `src/praxis/lore.py`          |
+| Writes        | Delegate to `lore` CLI -- never write directly           |
+| Configuration | TOML for config, YAML for registries                     |
+| Prose         | Strunk's Elements of Style -- active, concrete           |
+| Emdashes      | Never. Use double hyphens (`--`) instead                 |
 
 ## Commits
 
@@ -40,7 +47,8 @@ Active voice. Omit needless words. No `Co-Authored-By` signatures.
 
 - **No storage**: Lore owns all data. Praxis reads and synthesizes
 - **Delegation**: Writes go through the `lore` CLI, never directly to files
-- **Stdlib first**: Minimize dependencies. PyYAML is the sole exception
+- **Stdlib first**: Minimize dependencies. PyYAML is the sole required
+  exception; the optional `spectrace` extra adds psycopg for `DATABASE_URL`
 - **Synthesis**: Combine multiple Lore sources into actionable views
 
 ## File Layout
@@ -78,11 +86,12 @@ that breaks Praxis turns the build red instead of passing unnoticed.
 1. Branch from `main` with a descriptive name
 2. Keep changes focused -- one concern per PR
 3. Read existing Lore readers in `src/praxis/lore.py` before adding new ones
-4. Never add runtime dependencies beyond stdlib and PyYAML
+4. Never add runtime dependencies beyond stdlib, PyYAML, and the
+   `spectrace` extra
 5. Check `plans/` for session pickup files before starting new work
 
 ## What Not to Do
 
 - Don't store data -- delegate all writes to the `lore` CLI
-- Don't add dependencies beyond PyYAML
+- Don't add dependencies beyond PyYAML and the `spectrace` extra
 - Don't duplicate Lore's data; synthesize views from it

@@ -29,7 +29,14 @@ Praxis reads from Lore's memory (intent, failures, inbox, journal, patterns) and
 - Lore, with its data directory at `$LORE_DATA_DIR` (defaults to `$LORE_DIR`,
   itself defaulting to `~/dev/lore/`)
 
-No installation step. No `pip install`. The CLI runs directly from the repo.
+No installation step for the base CLI. It runs directly from the repo.
+
+Set `DATABASE_URL` to read SpecTrace from the shared Postgres instead of the
+local SQLite file. That path needs the `spectrace` extra:
+
+```bash
+pip install -e '.[spectrace]'
+```
 
 ### Add to PATH
 

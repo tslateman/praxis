@@ -18,7 +18,9 @@ modules:
       - spectrace:db/requirements_testrun
       - spectrace:enum/requirements_agenttask.status
       - spectrace:enum/requirements_requirement.risk_level
+      - spectrace:enum/requirements_requirement.status
       - spectrace:enum/requirements_requirement.verification_status
+      - spectrace:enum/requirements_testrequirementlink.last_status
       - spectrace:enum/requirements_testresult.status
   src/praxis/fleet.py:
     requirements: [REQ-PRX-005]

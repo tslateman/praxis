@@ -68,7 +68,7 @@ src/praxis/
 make check   # lint + format + test (matches CI)
 make test    # pytest only
 make lint    # ruff check
-make format  # ruff format --check
+make format  # ruff format src/ tests/
 ```
 
 ## Completed Plans
